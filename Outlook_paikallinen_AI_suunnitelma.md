@@ -68,6 +68,7 @@ Outlook COM -kutsut hoidetaan omalla STA-säikeellä ja tarvittavalla viestipump
 
 - Sovellus liittyy käynnissä olevaan Outlookiin. .NET 5:stä alkaen `Marshal.GetActiveObject` puuttuu, ja `new Application()` käynnistäisi suljetun Outlookin. Siksi ensin tarkistetaan `OUTLOOK.EXE`-prosessi ja liitytään vasta sen jälkeen. Outlook toimii omassa prosessissaan, joten sovelluksen bittisyydellä ei ole väliä.
 - Sovellus ja Outlook ajetaan samalla oikeustasolla ilman järjestelmänvalvojan oikeuksia. Oikeustasojen ero estää COM-yhteyden.
+- Outlookin interop-tyypit (NuGet `Microsoft.Office.Interop.Outlook`) upotetaan ohjelmaan (`EmbedInteropTypes`). Muuten .NET 10 yrittää ladata ajon aikana `office.dll`-kokoonpanon, eikä löydä sitä.
 - Kansion viestit luetellaan `Folder.GetTable()`-taululla. Sarakkeiksi haetaan EntryID, ReceivedTime, LastModificationTime ja `PR_INTERNET_MESSAGE_ID`, jolloin kaikkia viestejä ei tarvitse avata. Aikasuodatus tehdään DASL-kyselynä (`urn:schemas:httpmail:datereceived`), koska `Restrict` riippuu alueasetusten päivämäärämuodosta.
 - `Body` ja `SenderEmailAddress` kuuluvat ohjelmallisen käytön suojauksen piiriin. Niiden toiminta ilman kehotteita on vaiheen 1 hyväksymisehto.
 - IRM- tai OME-salatun viestin tekstiä ei välttämättä voi lukea. Tällainen viesti merkitään tilaan Tarkista eikä sitä luokitella sisällön perusteella.
