@@ -22,7 +22,7 @@ Sovellus ajetaan koneella [koti-pc](../documentation-repo/hosts/koti-pc.md). All
 | Outlookin välimuisti | 6 OST-tiedostoa, yhteensä 7,4 Gt, salaamattomalla levyllä | Ks. Salaus |
 | Levyn salaus | Ei käytössä asemilla C: eikä E: | Sovelluksen tietokanta salataan itse |
 | Laitteisto | Ryzen 7 3700X, 32 Gt RAM, RTX 2070 SUPER 8 Gt | Yksi malliajo kerrallaan, näytönohjain jaetaan Automatic1111:n kanssa |
-| .NET | Vain .NET 6 -ajoympäristö (tuki päättynyt), ei SDK:ta | .NET 10 SDK asennetaan ennen vaihetta 1 |
+| .NET | .NET 10 SDK 10.0.404 ja ajoympäristöt 10.0.15 asennettu; vanha .NET 6 -ajoympäristö jäljellä | WPF-, konsoli- ja xUnit-pohjat käytettävissä |
 | LM Studio | Käynnistyy käyttäjän `kortt` kirjautuessa, kuuntelee `0.0.0.0:1234` ilman tunnistautumista. Kehotteiden lokitus (`logSensitiveData`) ja `verbose` kytketty pois 17.11.2026 | Poiskytkentä todettu testiviestillä; tarkistetaan uudelleen LM Studion päivitysten jälkeen |
 | LM Studion mallit | Mm. Gemma 4 12B QAT, Gemma 4 E4B, Qwen 3.5 9B; suomenkielinen vertailu 2.10.2026 | Mallit ja vertailutyökalu ovat valmiina |
 | Ollama | Kuuntelee kaikissa osoitteissa (`OLLAMA_HOST=0.0.0.0:11434`), vain `llama3.1:8b` | Ei käytetä ensimmäisessä versiossa |
@@ -107,7 +107,7 @@ Raja-arvot ovat säädettäviä. Oletuksilla kiireellinen viesti näkyy arvioitu
 Jos jompikumpi ehto ei täyty, erää lykätään ja yritetään uudelleen muutaman minuutin kuluttua. Lykkäyksen syy näytetään käyttöliittymässä. Jos erää on lykätty yli tunnin, lykkäys näytetään varoituksena; kuvagenerointia ei kuitenkaan keskeytetä.
 
 **Erän aikana:**
-- Sovellus lataa mallin LM Studion REST-rajapinnalla valitulla kontekstipituudella (aluksi 8192) ja ottaa talteen ladatun instanssin tunnisteen.
+- Sovellus lataa mallin LM Studion REST-rajapinnalla (`POST /api/v1/models/load`) valitulla kontekstipituudella (aluksi 8192) ja ottaa talteen ladatun instanssin tunnisteen. Tunniste on ensimmäisellä latauksella sama kuin mallin nimi, joten sovellus pitää instanssia omanaan vain, jos samaa mallia ei ollut ladattuna ennen latausta.
 - Viestit käsitellään yksi kerrallaan. Ennen jokaista viestiä tarkistetaan Automatic1111:n tila. Jos generointi alkaa, erä keskeytetään hallitusti ja jäljellä olevat viestit jäävät jonoon.
 - Yhden erän enimmäiskesto on oletuksena 15 minuuttia. Pitkä kiinniotto, kuten loman jälkeen kertynyt jono, käsitellään useana eränä, joiden välillä näytönohjain vapautetaan.
 
@@ -188,9 +188,17 @@ Käyttäjän `AppData\Local` ei kuulu koneen restic-varmuuskopioihin. Arviot ova
 
 ### 0. Valmistelu
 
-- Asennetaan .NET 10 SDK (pitkäaikaistuettu versio): `winget install --id Microsoft.DotNet.SDK.10 -e` ja tarkistetaan `dotnet --list-sdks`.
-- ~~Kytketään pois LM Studion kehotteiden lokitus ja varmistetaan poiskytkentä keinotekoisella viestillä.~~ Tehty 17.11.2026: `logSensitiveData` ja `verbose` asetettu arvoon `false`, palvelin käynnistetty uudelleen ja testiviestin tunnistetta ei löytynyt kansiosta `server-logs`.
-- Varmistetaan, että ehdokasmallit latautuvat ja purkautuvat LM Studion REST-rajapinnalla.
+Vaihe 0 tehtiin 17.11.2026:
+
+- .NET 10 SDK 10.0.404 on asennettu (`winget install --id Microsoft.DotNet.SDK.10 -e`).
+- LM Studion kehotteiden lokitus on kytketty pois: `logSensitiveData` ja `verbose` asetettu arvoon `false` ja palvelin käynnistetty uudelleen. Testiviestin tunnistetta ei löytynyt kansiosta `server-logs`. Vanhat palvelinlokit on poistettu.
+- LM Studion REST-rajapinta on kokeiltu Gemma 4 12B QAT -mallilla keinotekoisella viestillä, kun Automatic1111 oli vapaana:
+  - `GET /api/v1/models` näyttää ladatut instanssit, joten erän esiehto voidaan tarkistaa.
+  - `POST /api/v1/models/load` latasi mallin 80 sekunnissa. Tämä oli ensimmäinen lataus E:-levyltä, ja lataus kestää aiempia mittauksia (36 s) pidempään.
+  - `/v1/chat/completions` palautti strict JSON Schema -muotoisen arvion 12 sekunnissa (145 syöte- ja 110 vastaustokenia, `finish_reason: stop`) ajattelu pois kytkettynä. Arvio oli järkevä: vastattava, määräaika 18.11.
+  - `POST /api/v1/models/unload` purki instanssin sekunnissa, minkä jälkeen yhtään mallia ei ollut ladattuna.
+  - Näytönohjaimen muistia oli käytössä 3 491 MiB ennen latausta, 7 778 MiB mallin ollessa ladattuna ja 1 793 MiB purun jälkeen. 12B-malli mahtuu siis 8 Gt:n näytönohjaimeen vain, kun Automatic1111 on vapaana.
+  - Vastaus oli sisennettyä JSONia, joten tyhjätilaa kului tokeneina. Kehotteessa voidaan pyytää tiivis JSON.
 
 ### 1. Outlook-yhteyden kokeilu — ensimmäinen toteutettava työ
 
