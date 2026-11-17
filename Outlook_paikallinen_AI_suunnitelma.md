@@ -47,7 +47,7 @@ Ensimmäisellä käynnistyskerralla sovellus näyttää Outlook-profiilissa näk
 
 Alkuun tarjotaan 100–200 viimeaikaisen viestin kokeilu. Luokitukset näkyvät ensin vain sovelluksessa. Käyttäjä voi korjata niitä ja ottaa myöhemmin käyttöön Outlook-luokkien lisäämisen.
 
-Päänäkymässä on kaikkien valittujen laatikoiden yhteinen lista: laatikko, lähettäjä, otsikko, arvioitu toimenpide, kiireellisyys, mahdollinen määräaika ja lyhyt yhteenveto. Viestin voi avata Outlookiin. Saatavilla ovat suodattimet Vastattava, Tehtävä, Odottaa muita ja Tarkista sekä luokituksen korjaus. Näkyvissä ovat myös viimeisen onnistuneen tarkistuksen aika, jonon koko, seuraavan eräajon arvioitu aika tai sen lykkäyksen syy sekä laatikkokohtaiset virheet. Painike "Käsittele nyt" käynnistää eräajon heti. Sovelluksen voi keskeyttää.
+Päänäkymässä on kaikkien valittujen laatikoiden yhteinen lista: laatikko, lähettäjä, otsikko, arvioitu toimenpide, kiireellisyys, mahdollinen määräaika ja lyhyt yhteenveto. Viestin voi avata Outlookiin. Saatavilla ovat suodattimet Vastattava, Tehtävä, Tiedoksi, Tarkista ja Hoidetut sekä luokituksen korjaus. Käyttäjän korjaus ohjaa myös listaa, ja viestin voi kuitata hoidetuksi paikallisesti. Odottaa muita -suodatin tulee vasta lähetettyjen viestien seurannan myötä. Näkyvissä ovat myös viimeisen onnistuneen tarkistuksen aika, jonon koko, seuraavan eräajon arvioitu aika tai sen lykkäyksen syy sekä laatikkokohtaiset virheet. Painike "Käsittele nyt" käynnistää eräajon heti. Sovelluksen voi keskeyttää.
 
 ## Arkkitehtuuri
 
@@ -306,6 +306,36 @@ Käyttöliittymän arvioinnin korjaukset 17.11.2026 (vaiheen 5 jälkeen, ennen o
 - Tilarivit eivät enää näytä ristiriitaisia lukuja: seurannan rivi näyttää ajantasaisen jonon ja erät, ja listan rivi kertoo, milloin lista on viimeksi päivitetty.
 
 Jäljellä: käyttäjä merkitsee otoksen näkymässä, minkä jälkeen löytymisosuus ja turhat hälytykset mitataan arviointiosasta. Jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
+
+#### Käyttöliittymän jatkokehitys (koodikatselmointi 17.11.2026)
+
+Näkymä katselmoitiin koodin perusteella (`MainWindow.xaml`, `MainViewModel.cs`) suunnitelman Käyttökokemus-osiota vasten. Näkymää ei ajettu. Suunnitelman mukaisesti on toteutettu yhteinen lista ja laatikkosuodatin, lista- ja tietopaneeli, toimenpidesuodattimet lukumäärineen, avaus Outlookissa, oma merkintä pikanäppäimineen, tarkistettavan syyt, jonossa ja virheelliset viestit omassa suodattimessaan, seurannan tila sekä Käsittele nyt ja keskeytys. Vaiheen 3 merkintätyölle on sokkomerkintä, säätö- ja arviointiosa sekä "Huomiotta jääneet". Ensikäynnistyksen valinnat, asetukset, luokkien käyttöönotto ja säilytys ovat vielä vain komentorivillä.
+
+Löydökset vakavimmasta alkaen:
+
+1. **Oma merkintä ei vaikuta listaan.** Suodattimet, Arvio-sarake, korostus ja tärkeysjärjestys lukevat vain AI-arviota. Jos AI arvioi uutiskirjeen vastattavaksi ja käyttäjä korjaa sen tiedoksi, viesti jää "Vaatii huomiota" -näkymään lihavoituna. Outlook-luokat taas noudattavat merkintää (`AiCategories.Desired`), joten sovellus ja Outlook näyttävät eri luokan, eikä korjauksen etusija toteudu omassa näkymässä.
+2. **Viestiä ei voi kuitata hoidetuksi.** "Vaatii huomiota" kasvaa säilytysajan loppuun asti, eikä merkintäkään poista viestiä näkymästä.
+3. **Sokkotila tyhjentää oletusnäkymän.** Kun AI-arvio on piilotettu, "Vaatii huomiota" näyttää vain varoitetut viestit. Jos sokkotila jää päälle, käyttäjä voi luulla, ettei mikään vaadi huomiota.
+4. **Uudet arviot näkyvät vasta F5:llä.** Tämä on tarkoituksellista merkintätyön aikana, mutta päivittäisessä käytössä tärkeä viesti voi jäädä huomaamatta pienen vihjetekstin varaan.
+5. **Seurannan tila on yksi pitkä rivi.** Ongelma on rivin viimeisenä ja katkeaa kapeassa ikkunassa. Laatikkovirheet näkyvät vain alarivin tekstinä.
+6. **Tallentamaton merkintä häviää hiljaa,** kun valitaan toinen rivi ennen tallennusta.
+7. **Pienemmät:**
+   - Oletusjärjestys on saapumisaika, ei kiireellisyys ja määräaika.
+   - Määräaika näkyy vain päivämääränä, ei suhteellisena, eikä myöhästynyttä korosteta.
+   - Kiinteät värit eivät seuraa Windowsin suurta kontrastia tai tummaa teemaa. Tila näkyy kuitenkin aina myös tekstinä.
+   - Näkymän suodatus- ja korostuslogiikalla ei ole testejä, koska se on WPF-projektissa.
+
+Toteutusjärjestys:
+
+| # | Muutos | Hyväksytty, kun |
+| --- | --- | --- |
+| 1 | Näkymä käyttää tehokasta luokitusta: oma merkintä, muuten AI-arvio. Suodatus-, korostus- ja järjestyslogiikka siirretään Coreen. AI-arvio näkyy edelleen tietopaneelissa vertailua varten. | Korjattu viesti siirtyy oikeaan suodattimeen, korostukseen ja järjestykseen ilman uutta arviota. Yksikkötestit kattavat merkinnän etusijan, sokkotilan ja varoitukset. |
+| 2 | Paikallinen Hoidettu-tila (tietokannan versio 4, oma taulu), Ctrl+E ja Hoidetut-näkymä. Outlookiin ei kirjoiteta mitään, ja merkintä ja arvio säilyvät. | Hoidettu viesti poistuu huomio- ja toimenpidesuodattimista mutta ei mittaus- tai ongelmasuodattimista. Kuittauksen voi perua. Säilytysaika poistaa myös hoidettu-tiedon. |
+| 3 | Sokkotilan banneri tai siirtyminen Merkitsemättömiin sekä varoitus tallentamattomasta merkinnästä. | Sokkotila ei näytä tyhjää huomionäkymää ilman selitystä. Tallentamaton muutos ei häviä kysymättä. |
+| 4 | Seurannan tila osiin (mallipalvelin, jono, viimeisin haku, ongelma ensin) ja laatikkovirheet laatikkovalintaan. Lista päivittyy automaattisesti, kun sokkotila on pois ja muokkaus ei ole kesken. | Ongelma näkyy kapeassakin ikkunassa. Uusi arvio näkyy ilman F5:tä päivittäisessä käytössä, mutta merkintätyön aikana lista ei vaihdu. |
+| 5 | Myöhemmin: asetusikkuna (laatikot, Outlook-luokat, säilytys) komentorivin rinnalle ja ensikäynnistyksen ohjattu valinta. | Käyttöönotto ei vaadi komentoriviä. |
+
+Kohdat 1–2 tehdään ennen otoksen merkintää ja luokkien kytkemistä päälle, koska ne vaikuttavat siihen, mitä käyttäjä näkee huomiota vaativina. Muutokset eivät lisää verkkoyhteyksiä tai Outlook-kirjoituksia, joten tietoturva-arviota ei tarvitse päivittää.
 
 ### 4. Tietoturvan arviointi
 
