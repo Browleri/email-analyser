@@ -116,7 +116,7 @@ Jos jompikumpi ehto ei täyty, erää lykätään ja yritetään uudelleen muuta
 
 **Erän jälkeen** sovellus purkaa vain itse lataamansa instanssin. Purku tehdään myös virhetilanteissa ja sovellusta suljettaessa. Varmuuden vuoksi latauspyynnössä asetetaan lyhyt käyttämättömyysaika (TTL), jolloin LM Studio purkaa mallin itse, vaikka sovellus kaatuisi.
 
-**Arvioitu nopeus** on noin 15–20 s viestiä kohden Gemma 4 12B -mallilla ja 6–8 s Gemma 4 E4B -mallilla, kun lataus ei ole mukana. 100–200 viestin kokeilu kestää siis noin 25–60 minuuttia. Arviot mitataan vaiheessa 2.
+**Mitattu nopeus** (vaihe 2, 180 oikeaa viestiä, Gemma 4 12B QAT): mediaani 11,6 s viestiä kohden ja 90 % viesteistä alle 14,5 s. Mallin lataus kesti 7–14 s, kun malli oli levyvälimuistissa, ja kylmänä noin 80 s. 15 minuutin erään mahtui 72–81 viestiä, ja koko otos vei kolme erää eli noin 36 minuuttia. Gemma 4 E4B oli keinotekoisella aineistolla noin 6 s viestiä kohden.
 
 ## Luokittelumalli
 
@@ -149,7 +149,7 @@ Ehdokasmallit:
 | Gemma 4 12B QAT (`google/gemma-4-12b-qat`) | Paras tulos suomenkielisissä tehtävissä (100 % opiskelu- ja hakutehtävissä), 14 tok/s | 6,9 Gt GPU / 3,4 Gt RAM |
 | Gemma 4 E4B (`google/gemma-4-e4b`) | Kolme kertaa nopeampi, hieman heikommat tulokset, 43 tok/s | 4,2 Gt GPU / 3,6 Gt RAM |
 
-Qwen 3.5 9B jätetään pois, koska se epäonnistui vertailun hakutehtävässä. Gemma 4 26B ei sovi, koska se vie 9 Gt keskusmuistia Automatic1111:n rinnalla. Malli valitaan suomen- ja englanninkielisen oman arviointiaineiston perusteella. Vertailuun laajennetaan olemassa olevaa työkalua `C:\Apps\llm-bench` sähköpostin luokittelutehtävällä. Siinä käytetään ensin keinotekoisia viestejä ja vasta sen jälkeen käyttäjän merkitsemää otosta. Ajattelu kytketään pois, koska ajattelevat mallit kuluttivat vertailussa koko vastausbudjettinsa. Lämpötila on 0. Yksi malliajo kerrallaan; nopeus ja muistinkulutus mitataan oikealla koneella.
+Qwen 3.5 9B jätetään pois, koska se epäonnistui vertailun hakutehtävässä. Gemma 4 26B ei sovi, koska se vie 9 Gt keskusmuistia Automatic1111:n rinnalla. Malli valitaan suomen- ja englanninkielisen oman arviointiaineiston perusteella. Vertailu tehdään sovelluksen omalla komennolla `email-analyser eval`, ei työkalulla `C:\Apps\llm-bench`. Näin vertailu käyttää täsmälleen samaa tekstin valmistelua, kehotetta, skeemaa ja tarkistusta kuin oikea käsittely. `llm-bench` tekee yhden kyselyn tehtävää kohden ja muotoilee kehotteet itse, joten sähköpostiluokittelu olisi pitänyt toteuttaa siihen toiseen kertaan. Testiaineisto on tiedostossa `eval/synthetic-emails.json`: keinotekoisia viestejä odotettuine luokkineen. Myöhemmin vertailuun lisätään käyttäjän merkitsemä otos. Ajattelu kytketään pois, koska ajattelevat mallit kuluttivat vertailussa koko vastausbudjettinsa. Lämpötila on 0. Yksi malliajo kerrallaan; nopeus ja muistinkulutus mitataan oikealla koneella.
 
 Ennen kuin sähköpostia lähetetään LM Studiolle:
 - Kehotteiden lokitus (`logSensitiveData`) kytketään pois ja poiskytkentä varmistetaan lähettämällä keinotekoinen testiviesti ja tarkistamalla kansio `C:\Users\kortt\.lmstudio\server-logs`. Asetus on palvelinkohtainen, joten se koskee myös Prompterin kehoteavustajaa.
@@ -228,7 +228,7 @@ Vaiheen 1 hyväksymisehdot täyttyivät 17.11.2026. Organisaatiorajoituksia tai 
 
 ### 2. Paikallinen arviointi
 
-Toteutetaan salattu SQLite-jono, tekstin valmistelu, eräajon ohjaus, LM Studio -sovitin ja vastauksen tarkistus. Mallivertailu tehdään ensin työkalulla `llm-bench` keinotekoisilla viesteillä. Sen jälkeen ajetaan 100–200 oikean viestin otos ilman Outlook-muutoksia. Mallin versio, kehote ja asetukset tallennetaan arvioihin.
+Toteutetaan salattu SQLite-jono, tekstin valmistelu, eräajon ohjaus, LM Studio -sovitin ja vastauksen tarkistus. Mallivertailu tehdään ensin komennolla `eval` keinotekoisilla viesteillä. Sen jälkeen ajetaan 100–200 oikean viestin otos ilman Outlook-muutoksia. Mallin versio, kehote ja asetukset tallennetaan arvioihin.
 
 Hyväksytty, kun:
 - vastaukset noudattavat skeemaa ja katkaistu sisältö näkyy,
@@ -238,6 +238,40 @@ Hyväksytty, kun:
 - erä lykkääntyy, kun Automatic1111 generoi tai LM Studiossa on muu malli ladattuna,
 - tietokantatiedosto ei aukea ilman avainta,
 - käsittelynopeus ja muistinkulutus on mitattu.
+
+Toteutus 17.11.2026 (ks. README ja CLAUDE.md):
+
+- **Rakenne:** `EmailAnalyser.Core` (tekstin valmistelu, kehote ja skeema, tarkistus, LM Studio -sovitin, eräajo, arviointi, salattu tietokanta), `EmailAnalyser.Outlook` (COM-sovitin omalla STA-säikeellään), komentorivityökalu `email-analyser` ja 39 yksikkötestiä. Testit kattavat salauksen, DPAPI-avaimen, loopback-rajauksen, tarkistuksen ja eräajon esiehdot, purun, virhetilanteet ja keskeytykset valesovittimilla.
+- **Tietokanta:** SQLite3 Multiple Ciphers (`SQLitePCLRaw.bundle_e_sqlite3mc` 2.1.11) SQLCipher 4 -muodossa, raaka 256-bittinen avain (`PRAGMA hexkey`). Avain on DPAPI-suojattuna tiedostossa `%LOCALAPPDATA%\EmailAnalyser\database.key`.
+- **Tekstin valmistelu:** linkit korvataan isäntänimellä, kehotteen erottimet neutraloidaan, vastausketju lyhennetään 800 merkin otteeksi (paitsi pelkässä välityksessä) ja teksti katkaistaan 6 000 merkkiin kappaleen, virkkeen tai sanan rajalta.
+- **Kehote:** skeemassa yhteenveto ja perustelu tulevat ennen luokittelukenttiä. Ohjelma laskee valmiiksi rajapäivät "huomenna" ja "seitsemän päivän raja", koska malli laski päivämäärävälit väärin. Kehotteen versio lasketaan tiedostojen tiivisteestä ja tallennetaan jokaiseen arvioon yhdessä mallin ja asetusten kanssa.
+
+Mallivertailu keinotekoisilla viesteillä (30 viestiä, `eval/synthetic-emails.json`):
+
+| Malli ja kehote | Huomiota vaativat löytyivät | Turhat hälytykset | Toimenpide | Kiireellisyys | Määräaika | Aihe | Aika / viesti | GPU ladattuna |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Gemma 4 12B QAT, ilman rajapäiviä | 16/16 | 1/14 | 97 % | 82 % | 100 % | 100 % | 15,9 s | 7 348 MiB |
+| Gemma 4 E4B, ilman rajapäiviä | 15/16 | 2/14 | 93 % | 77 % | 83 % | 96 % | 6,2 s | 5 813 MiB |
+| Gemma 4 12B QAT, rajapäivillä | 16/16 | 0/14 | 100 % | 100 % | 100 % | 100 % | 11,5 s | 7 658 MiB |
+
+- **Mallivalinta:** Gemma 4 12B QAT. E4B jätti webinaarikutsun kohdalla huomiota vaativan viestin löytämättä ja jätti 5/30 määräaikaa pois.
+- **Kiireellisyys:** ilman rajapäiviä kaikki 12B:n kiireellisyysvirheet olivat yli viikon päässä olevia määräaikoja, jotka malli luokitteli tälle viikolle.
+- **Kopio-viesti:** viesti, jossa vastaanottaja oli vain kopiona, tuli ensimmäisellä ajolla turhaksi hälytykseksi. Malli ei tiedä, kuka vastaanottajista on käyttäjä itse. Tämä korjataan vaiheessa 3 kertomalla mallille, onko käyttäjä suora vastaanottaja vai kopiona.
+- **Tulosten luotettavuus:** kehotetta paranneltiin samalla aineistolla, jolla tulos mitattiin. Viimeinen rivi ei siis ole riippumaton laatumittaus, vaan se tehdään vaiheessa 3 käyttäjän merkitsemän otoksen erillisellä osalla.
+
+Oikea otos 17.11.2026 (kehote `classify-v1-ba683cee`, ei Outlook-muutoksia):
+
+- **Otos:** kuuden seuratun laatikon Saapuneet-kansioista kunkin 30 uusinta viestiä, yhteensä 180. Kaikki 180 vastausta noudattivat skeemaa ensimmäisellä yrityksellä, eikä yhtään viestiä jäänyt lukematta.
+- **Toimenpide:** tiedoksi 118, vastattava 39, tehtävä 22 ja tarkista 1. Huomiota vaativia viestejä oli siis 61 (34 %). Määräaika löytyi 20 viestistä.
+- **Tarkistettavat:** 14 viestiä, joista 12 katkaistiin 6 000 merkkiin ja 2 sisälsi epäselvän pyynnön. Vastausketju lyhennettiin 78 viestissä.
+- **Aiheet:** uutiskirje 65, työ 57, hallinto 35, sijoitukset 18, henkilökohtainen 4 ja muu 1.
+- **Tokenit:** syötteen mediaani 1 645 ja enimmäismäärä 4 668, eli 8 192 tokenin konteksti riittää. Vastauksen mediaani oli 140 tokenia.
+- **Muisti:** näytönohjaimen muistia oli käytössä noin 0,7 Gt ennen latausta, 7,8 Gt mallin ollessa ladattuna ja 0,7–0,8 Gt purun jälkeen. Malli purettiin kaikkien kolmen erän jälkeen.
+- **Lokit:** `verify-logs` kävi läpi 110 LM Studion data- ja lokitiedostoa (`.lmstudio` ja `AppData\Roaming\LM Studio`, mallit pois lukien). Kehotteen erotinta tai käsiteltyjen viestien otsikoita ei löytynyt yhdestäkään.
+- **Salaus:** `db-check` vahvisti, ettei tietokannassa ole selväkielistä SQLite-otsaketta eikä se aukea ilman avainta.
+- **Lykkäykset oikeassa ympäristössä:** kun LM Studioon oli ladattu toinen malli (Qwen 3.5 4B) tai mallipalvelimen osoitteessa ei vastannut mikään, erä lykkääntyi ja 12 viestiä jäi jonoon. Lykkäys Automatic1111:n generoinnin vuoksi ja mallipalvelimen virhe kesken erän on todennettu yksikkötesteissä valesovittimilla.
+
+Vaiheen 2 hyväksymisehdot täyttyivät 17.11.2026. Luokittelun laatua ei ole vielä mitattu oikeilla viesteillä; se tehdään vaiheessa 3, kun käyttäjä merkitsee otoksen. Jonossa on 12 otoksen jälkeen saapunutta viestiä, jotka käsitellään seuraavalla ajolla.
 
 ### 3. Yhteinen näkymä ja laadun arviointi
 

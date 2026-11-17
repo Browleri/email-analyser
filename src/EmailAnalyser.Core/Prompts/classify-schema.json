@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "yhteenveto": { "type": "string" },
+    "perustelu": { "type": "string" },
+    "aihe": { "type": "string", "enum": ["tyo", "sijoitukset", "hallinto", "henkilokohtainen", "uutiskirje", "muu"] },
+    "toimenpide": { "type": "string", "enum": ["vastattava", "tehtava", "tiedoksi", "tarkista"] },
+    "kiireellisyys": { "type": "string", "enum": ["tanaan", "talla_viikolla", "myohemmin", "ei_maaraaikaa"] },
+    "maaraaika": { "type": ["string", "null"] },
+    "tarkistettava": { "type": "boolean" },
+    "tarkistuksen_syyt": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["puuttuva_konteksti", "epaselva_pyynto", "katkaistu_sisalto", "ristiriita"] }
+    }
+  },
+  "required": ["yhteenveto", "perustelu", "aihe", "toimenpide", "kiireellisyys", "maaraaika", "tarkistettava", "tarkistuksen_syyt"]
+}

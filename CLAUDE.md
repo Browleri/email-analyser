@@ -12,15 +12,33 @@ Paikallinen AI-avustaja Classic Outlookiin. Ohjelma lukee käyttäjän Outlook-l
 ## Tietosuoja: ehdottomat säännöt
 
 - Älä tulosta, lokita, tallenna tiedostoon tai commitoi viestien tekstisisältöä. Kansionimet, lukumäärät ja käyttäjän erikseen valitseman testiviestin otsikko ovat sallittuja.
-- Älä lähetä viestien sisältöä tai Outlook-tietoja mihinkään ulkoiseen palveluun. Paikallinen LM Studio on ainoa sallittu vastaanottaja, ja se otetaan käyttöön vasta suunnitelman vaiheessa 2.
+- Kun Claude ajaa komentoja, niiden tuloste päätyy Claude-istuntoon eli ulkoiseen palveluun. Siksi komentorivityökalut tulostavat oikeista viesteistä vain metatietoja ja koostelukuja. Älä lue tietokannasta otsikoita, lähettäjiä, yhteenvetoja tai perusteluja tulosteeseen. Ainoa poikkeus on keinotekoinen testiaineisto (`eval`).
+- Älä lähetä viestien sisältöä tai Outlook-tietoja mihinkään ulkoiseen palveluun. Paikallinen LM Studio on ainoa sallittu vastaanottaja.
 - Testit ja kokeilut tehdään keinotekoisilla viesteillä. Oikeita viestejä käsitellään vain käyttäjän pyynnöstä.
 - Outlookiin saa kirjoittaa vain sovelluksen omia `AI:`-luokkia, ja kehitysvaiheessa vain käyttäjän valitsemaan testiviestiin. Älä merkitse viestejä luetuiksi äläkä siirrä, poista tai lähetä mitään.
 - Älä muuta Outlookin, Windowsin tai virustorjunnan suojausasetuksia.
+
+## Rakenne
+
+- `src/EmailAnalyser.Core`: tekstin valmistelu, kehote (`Prompts/`), vastauksen tarkistus, LM Studio -sovitin, eräajo, arviointi ja salattu tietokanta.
+- `src/EmailAnalyser.Outlook`: Outlook COM -sovitin omalla STA-säikeellään.
+- `src/EmailAnalyser.Cli`: komentorivityökalu `email-analyser`.
+- `src/OutlookProbe`: vaiheen 1 kokeiluohjelma.
+- `tests/EmailAnalyser.Tests`: xUnit-testit; eivät tarvitse Outlookia eivätkä LM Studiota.
+- `eval/synthetic-emails.json`: keinotekoinen testiaineisto odotettuine luokkineen.
+- Ajonaikaiset tiedot (`settings.json`, salattu `analyser.db` ja DPAPI-suojattu `database.key`) ovat kansiossa `%LOCALAPPDATA%\EmailAnalyser`. Kehotteen muutos vaihtaa automaattisesti kehoteversion, joka tallentuu jokaiseen arvioon.
 
 ## Komennot
 
 ```
 dotnet build
+dotnet test
+email-analyser init --stores 1 4 6 7 8 10   # seurattavat tietovarastot
+email-analyser scan --per-store 30          # uusimmat viestit jonoon
+email-analyser run                          # käsittele jono erinä
+email-analyser status | report              # jonon tila ja koosteluvut
+email-analyser eval --models google/gemma-4-12b-qat,google/gemma-4-e4b
+email-analyser verify-logs | db-check       # lokien ja salauksen tarkistus
 dotnet run --project src/OutlookProbe -- stores     # laatikot ja kansiot
 dotnet run --project src/OutlookProbe -- selected   # Outlookissa valittu viesti
 dotnet run --project src/OutlookProbe -- read-test 1 4 --count 10   # lukutila ja suojatut ominaisuudet, ei sisältöä
@@ -28,7 +46,7 @@ dotnet run --project src/OutlookProbe -- category-test "AI: testiviesti" --store
 dotnet run --project src/OutlookProbe -- open 1 "AI: testiviesti"   # avaa viestin viitteen perusteella
 ```
 
-Tietovarastojen numerot ovat `stores`-komennon järjestyksessä ja voivat muuttua, kun profiiliin lisätään tilejä.
+`email-analyser` on käännetty ohjelma `src/EmailAnalyser.Cli/bin/Debug/net10.0-windows/email-analyser.exe`, tai sen voi ajaa komennolla `dotnet run --project src/EmailAnalyser.Cli --`. Aja se repon juuresta, jotta `eval` löytää testiaineiston. Aja `dotnet build` ennen käännetyn ohjelman käyttöä: `dotnet test` kääntää vain testiprojektin riippuvuudet, joten muuten `email-analyser.exe` voi käyttää vanhaa kehotetta. Tarkista tulosteen kehoteversio. Tietovarastojen numerot ovat `stores`-komennon järjestyksessä ja voivat muuttua, kun profiiliin lisätään tilejä.
 
 ## Dokumentointivastuut
 

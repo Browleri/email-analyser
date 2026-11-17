@@ -1,0 +1,13 @@
+Nykyhetki: {{now}} (Europe/Helsinki)
+Kiireellisyyden rajapäivät: huomenna = {{tomorrow}}, seitsemän päivän raja = {{week_limit}}
+Postilaatikko: {{mailbox}}
+Lähettäjä: {{from}}
+Vastaanottajat: {{to}}
+Kopio: {{cc}}
+Vastaanotettu: {{received}}
+Otsikko: {{subject}}
+Sisältö katkaistu: {{truncated}}
+
+<<<VIESTI ALKAA>>>
+{{body}}
+<<<VIESTI PÄÄTTYY>>>
