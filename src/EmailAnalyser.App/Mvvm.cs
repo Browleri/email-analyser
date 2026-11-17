@@ -83,7 +83,11 @@ public static class Display
         ["unreadable"] = "Ei luettavissa", ["gone"] = "Poistunut", ["failed"] = "Epäonnistui",
         ["puuttuva_konteksti"] = "puuttuva konteksti", ["epaselva_pyynto"] = "epäselvä pyyntö",
         ["katkaistu_sisalto"] = "katkaistu sisältö", ["ristiriita"] = "ristiriita", ["ohjailuyritys"] = "mahdollinen ohjailuyritys",
+        ["huijausmerkki"] = "lähettäjän tunnistus ei täsmää",
         ["saato"] = "säätöosa", ["arviointi"] = "arviointiosa",
+        ["luokka_Written"] = "kirjoitettu", ["luokka_Unchanged"] = "oli jo kunnossa", ["luokka_Gone"] = "viesti poistunut",
+        ["luokka_Mismatch"] = "viesti muuttunut, ei kirjoitettu", ["luokka_NotSupported"] = "vain M365-laatikoihin",
+        ["luokka_Failed"] = "kirjoitus epäonnistui",
     };
 
     public static string Text(string? key) =>

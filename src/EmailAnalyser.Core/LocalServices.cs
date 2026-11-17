@@ -64,7 +64,7 @@ public sealed record LoadResult(string InstanceId, double LoadSeconds);
 
 public sealed record ChatRequest(string Instance, string System, string User, string SchemaJson, int MaxTokens);
 
-public sealed record ChatResponse(string Content, string? FinishReason, int? PromptTokens, int? CompletionTokens, TimeSpan Elapsed);
+public sealed record ChatResponse(string Content, string? FinishReason, int? PromptTokens, int? CompletionTokens, TimeSpan Elapsed, string? Model = null);
 
 public interface ILanguageModelServer
 {
@@ -154,7 +154,8 @@ public sealed class LmStudioClient : ILanguageModelServer, IDisposable
             choice?["finish_reason"]?.GetValue<string>(),
             root["usage"]?["prompt_tokens"]?.GetValue<int>(),
             root["usage"]?["completion_tokens"]?.GetValue<int>(),
-            Stopwatch.GetElapsedTime(started));
+            Stopwatch.GetElapsedTime(started),
+            root["model"]?.GetValue<string>());
     }
 
     public void Dispose() => _http.Dispose();

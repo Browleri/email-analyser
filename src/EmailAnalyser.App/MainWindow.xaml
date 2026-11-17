@@ -20,7 +20,26 @@
                 <CheckBox Content="Sokkomerkintä (piilota AI-arvio, kunnes merkitty)" IsChecked="{Binding BlindMode}"
                           VerticalAlignment="Center" Margin="16,0,0,0" />
                 <Button Content="Päivitä (F5)" Command="{Binding RefreshCommand}" Margin="16,0,0,0" Padding="10,2" />
+                <TextBlock Text="{Binding NewResultsHint}" Foreground="#0B5CAD" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0" />
+                <Button Content="Käsittele nyt" Command="{Binding ProcessNowCommand}" Margin="24,0,0,0" Padding="10,2"
+                        ToolTip="Hae uudet viestit ja käsittele jono heti, jos näytönohjain on vapaa" />
+                <Button Content="{Binding PauseButtonText}" Command="{Binding TogglePauseCommand}" Margin="6,0,0,0" Padding="10,2"
+                        ToolTip="Keskeyttää haun ja eräajon; käynnissä oleva erä pysäytetään ja malli puretaan" />
             </StackPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Bottom" Padding="8,3" BorderBrush="#DDD" BorderThickness="0,1,0,0">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="#F7F7F7" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding MonitorAttention}" Value="True">
+                            <Setter Property="Background" Value="#FFF4E5" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <TextBlock Text="{Binding StatusMonitor}" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusMonitor}" />
         </Border>
 
         <StatusBar DockPanel.Dock="Bottom">
@@ -78,6 +97,11 @@
                                 <TextBlock TextWrapping="Wrap"
                                            Text="Viestissä on tekoälylle osoitettua tekstiä. Arvio voi olla viestin ohjailema: tarkista viesti itse." />
                             </Border>
+                            <Border Background="#FDECEC" BorderBrush="#D9534F" BorderThickness="1" Padding="6" Margin="0,0,0,8"
+                                    Visibility="{Binding SenderSuspected, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock TextWrapping="Wrap"
+                                           Text="Vastaanottava palvelin ei hyväksynyt lähettäjän tunnistusta, tai näyttönimessä on eri osoite kuin todellisella lähettäjällä. Viesti voi olla huijaus: älä maksa, avaa linkkejä tai anna tunnuksia ennen kuin olet varmistanut lähettäjän muuta kautta." />
+                            </Border>
                             <TextBlock TextWrapping="Wrap">
                                 <Run Text="{Binding AiAction, Mode=OneWay}" FontWeight="SemiBold" /> · <Run Text="{Binding AiUrgency, Mode=OneWay}" /> · määräaika <Run Text="{Binding AiDeadline, Mode=OneWay}" /> · <Run Text="{Binding AiTopic, Mode=OneWay}" />
                             </TextBlock>
@@ -86,7 +110,8 @@
                             <TextBlock Text="Perustelu" Foreground="Gray" Margin="0,8,0,0" />
                             <TextBlock Text="{Binding Rationale}" TextWrapping="Wrap" />
                             <TextBlock Text="{Binding Review}" Foreground="#B05000" TextWrapping="Wrap" Margin="0,8,0,0" />
-                            <TextBlock Text="{Binding ModelInfo}" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0" />
+                            <TextBlock Text="{Binding Category}" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0" />
+                            <TextBlock Text="{Binding ModelInfo}" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
                             <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
                                        Text="Arvio on paikallisen kielimallin ehdotus. Viestin sisältö voi vaikuttaa siihen, joten tarkista lähettäjä ennen maksuja, tunnusten antamista tai muita toimia." />
                         </StackPanel>

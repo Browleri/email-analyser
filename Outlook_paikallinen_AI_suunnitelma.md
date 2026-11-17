@@ -316,7 +316,48 @@ Arvio päivitetään ennen vaiheen 5 Outlook-kirjoituksia, ennen käyttöönotto
 
 Lisätään kahden minuutin tarkistus, eräajon käynnistysehdot, keskeytys/jatkaminen, kiinniotto, rajatut uudelleenyritykset ja valinnainen M365-luokkien kirjoitus. Gmail näkyy samassa listassa paikallisin luokin. Luokkamuutoksista säilytetään palautukseen tarvittava historia; palautus poistaa vain sovelluksen omat muutokset huomioiden myöhemmät käyttäjämuutokset.
 
-Hyväksytty, kun lepotila, Outlookin sulkeminen ja uudelleenkäynnistys, verkkokatko, LM Studion uudelleenkäynnistys, kansiosiirto ja vain luku -kansio eivät hukkaa käsittelytilaa tai aiheuta toistuvia muutoksia. Viestien avaus tai arviointi ei merkitse niitä luetuiksi. Kuvagenerointi ei hidastu sovelluksen takia. Tietoturva-arvion kohdan "Avoimet toimenpiteet" vaiheen 5 vaatimukset on toteutettu ja testattu: kiinteä luokkataulukko, kohteen tarkistus, ohjailuyrityksen rajaus, palvelimen tunnistus, otsakkeista johdettu huijausmerkki ja säilytysaika. Käyttöönoton jälkeen seurataan noin viikon ajan käytännön toimivuutta, eräviivettä ja lykkäysten määrää ja säädetään erän raja-arvot.
+Hyväksytty, kun lepotila, Outlookin sulkeminen ja uudelleenkäynnistys, verkkokatko, LM Studion uudelleenkäynnistys, kansiosiirto ja vain luku -kansio eivät hukkaa käsittelytilaa tai aiheuta toistuvia muutoksia. Viestien avaus tai arviointi ei merkitse niitä luetuiksi. Kuvagenerointi ei hidastu sovelluksen takia. Tietoturva-arvion vaiheen 5 vaatimukset on toteutettu ja testattu: kiinteä luokkataulukko, kohteen tarkistus, ohjailuyrityksen rajaus, palvelimen tunnistus, otsakkeista johdettu huijausmerkki ja säilytysaika. Käyttöönoton jälkeen seurataan noin viikon ajan käytännön toimivuutta, eräviivettä ja lykkäysten määrää ja säädetään erän raja-arvot.
+
+Toteutus 17.11.2026:
+
+```mermaid
+flowchart TD
+    T[Kierros 2 min välein<br/>tai Käsittele nyt] --> P{Keskeytetty?}
+    P -->|kyllä| W[Odota]
+    P -->|ei| R[Säilytysaika<br/>kerran vuorokaudessa]
+    R --> S[Haku: kunkin laatikon Saapuneet<br/>uusimmasta nähdystä viestistä - 60 min]
+    S -->|Outlook ei vastaa| W
+    S --> Q{Jonossa ≥ 10, vanhin ≥ 20 min<br/>tai Käsittele nyt?}
+    Q -->|ei| C
+    Q -->|kyllä, ei lykkäysodotusta| B[Erä: esiehdot, lataus,<br/>arviointi, purku]
+    B -->|lykätty tai keskeytyi virheeseen| D[Uusi yritys aikaisintaan 5 min<br/>varoitus yli tunnin jälkeen]
+    B -->|valmis tai aikaraja| C{Luokat käytössä?}
+    D --> C
+    C -->|test tai on| K[Luokkien synkronointi:<br/>kiinteä taulukko, tunnistetarkistus,<br/>ei toistoa, historia]
+    C -->|off| W
+    K --> W
+    W --> T
+```
+
+- **Seuranta (`MonitorService`):** näkymä käynnistää seurannan taustalle omalla tietokantayhteydellään. Komentorivillä sama tehdään komennolla `email-analyser watch`. Haku alkaa laatikon uusimman jo nähdyn viestin vastaanottoajasta 60 minuutin limityksellä, ei kellonajasta. Näin lepotilan tai verkkokatkon jälkeen myöhässä synkronoituvat viestit löytyvät. Ensimmäinen haku kattaa kolme päivää ja enintään 300 viestiä laatikkoa kohden. Kierros käsittelee enintään yhden erän, joten pitkä kiinniotto jakautuu eriin, joiden välillä näytönohjain vapautuu. Asetukset luetaan joka kierroksella uudelleen.
+- **Käynnistysehdot ja lykkäys:** erä käynnistyy, kun jonossa on vähintään 10 viestiä, vanhin on odottanut 20 minuuttia tai käyttäjä painaa "Käsittele nyt". Lykätty tai virheeseen pysähtynyt erä yritetään uudelleen aikaisintaan 5 minuutin kuluttua, ja yli tunnin lykkäys näkyy korostettuna. Erän esiehtoihin lisättiin palvelimen tunnistus: porttia 1234 saa kuunnella vain `LM Studio.exe`.
+- **Keskeytys ja vikasietoisuus:** "Keskeytä seuranta" pysäyttää käynnissä olevan erän ja purkaa mallin. Jos Outlook suljetaan tai käynnistetään uudelleen, sovitin vapauttaa vanhentuneen yhteyden ja liittyy seuraavalla kierroksella taas käynnissä olevaan Outlookiin; erä pysähtyy laskematta yritystä viesteille. Käsittelytila on kokonaan tietokannassa.
+- **Outlook-luokat (`CategorySync`):** oletuksena pois. Tila `test` kirjoittaa vain viestiin, jonka otsikko on täsmälleen asetuksen testiotsikko, ja `on` kaikkiin seurattujen M365-laatikoiden arvioituihin viesteihin. Gmail saa luokan vain näkymässä. Luokka tulee kiinteästä taulukosta, ja käyttäjän merkintä menee arvion edelle. Ohjailuyritys tai huijausmerkki johtaa aina luokkaan `AI: Tarkista`. Ennen kirjoitusta tarkistetaan viestin Message-ID ja sisältötiiviste. Nykyiset luokat luetaan juuri ennen tallennusta, ja muut luokat ja niiden järjestys säilyvät. Erotin luetaan käyttäjän alueasetuksesta. Lukutila tarkistetaan tallennuksen jälkeen.
+- **Historia ja palautus:** jokaisen viestin tavoiteluokka ja sovelluksen oma luokka tallennetaan, ja jokainen muutos kirjataan lokiin luokkineen ennen ja jälkeen. Sama muutos tehdään vain kerran. Käyttäjän poistamaa luokkaa ei lisätä uudelleen, ennen kuin arvio tai merkintä muuttuu. `categories rollback` kytkee kirjoituksen pois ja poistaa vain sovelluksen itse lisäämät luokat; käyttäjän myöhemmin lisäämät luokat jäävät.
+- **Huijausmerkki:** vastaanottavan palvelimen ylin `Authentication-Results`-otsake (DMARC- tai compauth-hylkäys tai SPF-hylkäys ilman DKIM-hyväksyntää) tai näyttönimessä oleva vieras osoite pakottaa toimenpiteeksi tarkista ja näyttää punaisen varoituksen.
+- **Säilytysaika:** 90 päivää. Merkityistä ja luokitelluista viesteistä säilyvät vain tunnisteet, luokat ja merkinnät.
+- **Tietokanta:** versio 3 lisää laatikoiden hakukohdan, luokkatilan ja luokkahistorian.
+
+Tulokset 17.11.2026:
+- Luokan kirjoitus ja palautus testiviestiin "AI: testiviesti" testitilassa: `Blue category` → `Blue category, AI: Tiedoksi`. Toinen ajo ei muuttanut mitään, ja palautus jätti jäljelle `Blue category`.
+- Palvelimen tunnistus oikealla koneella: portin 1234 omistaa `%LOCALAPPDATA%\Programs\LM Studio\LM Studio.exe`.
+- Seuranta oikeasti 18 minuuttia (`watch --minutes 18 --now`): ensimmäinen haku lisäsi jonoon 105 viestiä kolmen päivän ajalta. Kaksi erää arvioi 48 viestiä ilman virheitä, ja jokainen vastaus läpäisi `model`-kentän tarkistuksen. Aikarajan keskeyttämä erä purki mallin, ja LM Studion lokit olivat puhtaat. 57 viestiä jäi jonoon seuraavaa ajoa varten. Erän nopeus oli noin 22 s viestiä kohden, eli hitaampi kuin vaiheessa 2: näytönohjaimella oli ennen latausta muuta kuormaa (2,2 Gt).
+- Koeajo paljasti virheen: "Käsittele nyt" jätti herätteen odottamaan, joten toinen erä alkoi heti ensimmäisen jälkeen ilman kahden minuutin taukoa. Korjattu ja testattu (F16).
+- Huijausmerkki 192 oikeassa viestissä: tunnistusotsake löytyi 191 viestistä, ja signaali osui 2 viestiin (`dmarc_fail`, sama laatikko). Ohjailuheuristiikka ei osunut yhteenkään.
+- Testiaineistoon lisättiin kaksi väärennetyn lähettäjän tapausta (`huijaus-dmarc-lasku`, `huijaus-nimi-ristiriita`). Yksikkötesti varmistaa, että huijausmerkki osuu niihin eikä mihinkään muuhun aineiston tapaukseen.
+- Yksikkötestit kattavat eräehdot, lykkäyksen, varoituksen, keskeytyksen, Outlookin katkon, haun limityksen, luokkien toistamattomuuden, käyttäjän poistaman luokan, palautuksen, ristiriitaisen kohteen, rajatut uudelleenyritykset ja säilytysajan.
+
+Jäljellä: käyttäjän käsikokeet (lepotila, Outlookin sulkeminen ja uudelleenkäynnistys, verkkokatko, LM Studion uudelleenkäynnistys, viestin siirto kesken jonon), kahden `dmarc_fail`-osuman tarkistus ja lukemattoman testiviestin luokkakoe. Luokkien kirjoitusta kaikkiin viesteihin ei kytketä päälle, ennen kuin vaiheen 3 laatu on mitattu käyttäjän merkinnöistä.
 
 ### 6. Käyttöönotto
 

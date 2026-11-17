@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using EmailAnalyser.Core;
@@ -33,6 +33,9 @@ internal static class Program
                 "init" => await Init(args),
                 "scan" => await Scan(args),
                 "run" => await Run(args, cts.Token),
+                "watch" => await Watch(args, cts.Token),
+                "categories" => await Categories(args, cts.Token),
+                "retention" => Retention(),
                 "status" => Status(),
                 "report" => Report(),
                 "eval" => await Eval(args, cts.Token),
@@ -64,6 +67,13 @@ internal static class Program
               init --stores 1 4 6 [--model <avain>]   valitse seurattavat tietovarastot (numerot kuten OutlookProbe stores)
               scan [--per-store 30]                   lisää jonoon kunkin laatikon uusimmat viestit
               run [--max 200]                         käsittele jono erinä (Ctrl+C keskeyttää ja purkaa mallin)
+              watch [--minutes 30] [--now]            jatkuva seuranta: haku, eräehdot, lykkäys ja luokat (Ctrl+C lopettaa)
+              categories status                       Outlook-luokkien tila ja testiviestin löytyminen
+              categories mode off|test|on [--subject "AI: testiviesti"]
+                                                      luokkien kirjoitus: pois, vain testiviestiin tai kaikkiin M365-viesteihin
+              categories sync                         kirjoita luokat nyt valitulla tavalla
+              categories rollback                     kytke kirjoitus pois ja poista sovelluksen lisäämät luokat
+              retention                               poista säilytysaikaa vanhemmat tiedot nyt
               status                                  jonon tila ja viimeiset erät
               report                                  koosteluvut arvioista (ei sisältöä)
               eval [--models a,b] [--file polku]      mallivertailu keinotekoisilla viesteillä
@@ -139,7 +149,7 @@ internal static class Program
         using var lmStudio = new LmStudioClient(settings.LmStudioUrl, TimeSpan.FromMinutes(5));
         using var a1111 = new Automatic1111Probe(settings.Automatic1111Url);
         var classifier = new Classifier(lmStudio, PromptTemplate.LoadEmbedded(), settings.ToClassifierOptions());
-        var runner = new BatchRunner(store, lmStudio, a1111, outlook, classifier, TimeProvider.System, new NvidiaSmiProbe(), new LmStudioPrivacyCheck());
+        var runner = new BatchRunner(store, lmStudio, a1111, outlook, classifier, TimeProvider.System, new NvidiaSmiProbe(), new LmStudioPrivacyCheck(), settings.ToIdentityCheck());
         Console.WriteLine($"Malli {settings.Model}, kehote {classifier.Prompt.Version}");
 
         var processed = 0;
@@ -154,7 +164,7 @@ internal static class Program
                               $"arvioitu {result.Assessed}, virheellisiä {result.Invalid}, ei luettavissa {result.Unavailable}, " +
                               $"epäonnistui {result.Failed}, jonossa {result.Remaining}");
             if (result.Outcome is BatchOutcome.NothingQueued or BatchOutcome.Deferred ||
-                result.Outcome == BatchOutcome.Stopped && result.Reason != "erän enimmäiskesto täyttyi" ||
+                result.Outcome == BatchOutcome.Stopped && result.Reason != BatchStopReasons.MaxDuration ||
                 result.Remaining == 0)
             {
                 break;
@@ -162,6 +172,137 @@ internal static class Program
         }
 
         PrintBatches(store, 3);
+        return 0;
+    }
+
+    private static async Task<int> Watch(string[] args, CancellationToken cancellationToken)
+    {
+        var settings = RequireSettings();
+        using var store = OpenStore();
+        using var outlook = new OutlookMailbox();
+        using var lmStudio = new LmStudioClient(settings.LmStudioUrl, TimeSpan.FromMinutes(5));
+        using var a1111 = new Automatic1111Probe(settings.Automatic1111Url);
+        var classifier = new Classifier(lmStudio, PromptTemplate.LoadEmbedded(), settings.ToClassifierOptions());
+        var runner = new BatchRunner(store, lmStudio, a1111, outlook, classifier, TimeProvider.System, new NvidiaSmiProbe(), new LmStudioPrivacyCheck(), settings.ToIdentityCheck());
+        // Settings are re-read every round, so "categories mode" takes effect without a restart.
+        var monitor = new MonitorService(store, outlook, runner, new CategorySync(store, outlook, TimeProvider.System),
+            () => AppSettings.Load(AppPaths.Settings), TimeProvider.System);
+        Console.WriteLine($"Malli {settings.Model}, kehote {classifier.Prompt.Version}, luokat {settings.CategoryMode}. Ctrl+C lopettaa.");
+
+        string? last = null;
+        monitor.StatusChanged += s =>
+        {
+            var line = MonitorText.Describe(s);
+            var perMessageProgress = s.Activity?.StartsWith("Käsitellään ", StringComparison.Ordinal) == true && s.Activity != "Käsitellään jonoa";
+            if (line != last && !perMessageProgress)
+            {
+                Console.WriteLine($"{DateTime.Now:HH:mm:ss} {line}");
+            }
+
+            last = line;
+        };
+
+        using var limit = Option(args, "--minutes") is { } m
+            ? new CancellationTokenSource(TimeSpan.FromMinutes(double.Parse(m, CultureInfo.InvariantCulture)))
+            : new CancellationTokenSource();
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, limit.Token);
+        if (args.Contains("--now"))
+        {
+            monitor.ProcessNow();
+        }
+
+        await monitor.RunAsync(linked.Token);
+        PrintBatches(store, 3);
+        return 0;
+    }
+
+    private static async Task<int> Categories(string[] args, CancellationToken cancellationToken)
+    {
+        var sub = args.Length > 1 ? args[1] : "status";
+        var settings = AppSettings.Load(AppPaths.Settings);
+        switch (sub)
+        {
+            case "mode":
+            {
+                var mode = (args.Length > 2 ? args[2] : "") switch
+                {
+                    "off" => CategoryMode.Off,
+                    "test" => CategoryMode.Test,
+                    "on" => CategoryMode.On,
+                    _ => throw new ArgumentException("Anna tila: categories mode off|test|on"),
+                };
+                settings = settings with { CategoryMode = mode, CategoryTestSubject = Option(args, "--subject") ?? settings.CategoryTestSubject };
+                settings.Save(AppPaths.Settings);
+                Console.WriteLine(mode switch
+                {
+                    CategoryMode.Off => "Luokkien kirjoitus pois. Jo kirjoitetut luokat jäävät; poista ne komennolla categories rollback.",
+                    CategoryMode.Test => $"Luokat kirjoitetaan vain viestiin, jonka otsikko on täsmälleen \"{settings.CategoryTestSubject}\".",
+                    _ => "Luokat kirjoitetaan kaikkiin seurattujen M365-laatikoiden arvioituihin viesteihin.",
+                });
+                return 0;
+            }
+
+            case "sync":
+            {
+                if (settings.CategoryMode == CategoryMode.Off)
+                {
+                    Console.Error.WriteLine("Luokkien kirjoitus on pois päältä (categories mode test|on).");
+                    return 1;
+                }
+
+                using var store = OpenStore();
+                using var outlook = new OutlookMailbox();
+                var r = await new CategorySync(store, outlook, TimeProvider.System).SyncAsync(settings.CategoryMode, settings.CategoryTestSubject, cancellationToken);
+                Console.WriteLine($"Kirjoitettu {r.Written}, jo kunnossa {r.Unchanged}, ohitettu {r.Skipped}, estetty {r.Blocked}, epäonnistui {r.Failed}.");
+                PrintCategorySummary(store, settings);
+                return 0;
+            }
+
+            case "rollback":
+            {
+                settings = settings with { CategoryMode = CategoryMode.Off };
+                settings.Save(AppPaths.Settings);
+                using var store = OpenStore();
+                using var outlook = new OutlookMailbox();
+                var r = await new CategorySync(store, outlook, TimeProvider.System).RollbackAsync(cancellationToken);
+                Console.WriteLine($"Kirjoitus kytketty pois. Poistettu {r.Written}, valmiiksi poissa {r.Unchanged}, estetty {r.Blocked}, epäonnistui {r.Failed}.");
+                PrintCategorySummary(store, settings);
+                return r.Blocked + r.Failed == 0 ? 0 : 4;
+            }
+
+            default:
+            {
+                using var store = OpenStore();
+                PrintCategorySummary(store, settings);
+                return 0;
+            }
+        }
+    }
+
+    private static void PrintCategorySummary(AnalyserStore store, AppSettings settings)
+    {
+        var (byStatus, owned, log) = store.CategorySummary();
+        Console.WriteLine($"Tila: {settings.CategoryMode}" +
+                          (settings.CategoryMode == CategoryMode.Test ? $", testiviesti \"{settings.CategoryTestSubject}\"" : ""));
+        var (found, assessed) = store.FindBySubject(settings.CategoryTestSubject);
+        Console.WriteLine($"Testiviesti tietokannassa: {found} kpl, joista arvioituja {assessed}.");
+        if (store.LastCategoryChangeForSubject(settings.CategoryTestSubject) is { } last)
+        {
+            // Only the user-chosen test message: its category names are not message content.
+            Console.WriteLine($"Testiviestin viimeisin muutos ({last.Kind}): {last.Status}, luokat [{last.Before}] → [{last.After}]" +
+                              (last.Error is null ? "" : $", huomio: {last.Error}"));
+        }
+        PrintCounts("Luokkatilat", byStatus);
+        Console.WriteLine($"Sovelluksen lisäämiä luokkia nyt {owned}, historiarivejä {log}.");
+    }
+
+    private static int Retention()
+    {
+        var settings = AppSettings.Load(AppPaths.Settings);
+        using var store = OpenStore();
+        var r = store.ApplyRetention(DateTimeOffset.UtcNow - TimeSpan.FromDays(settings.RetentionDays));
+        Console.WriteLine($"Säilytysaika {settings.RetentionDays} pv: poistettu {r.Deleted} viestiä, " +
+                          $"merkityistä tai luokitelluista poistettu tunnistetiedot {r.Redacted}.");
         return 0;
     }
 
@@ -175,6 +316,10 @@ internal static class Program
         }
 
         PrintBatches(store, 8);
+        var settings = AppSettings.Load(AppPaths.Settings);
+        Console.WriteLine($"Mallipalvelimen tunnistus: {settings.ToIdentityCheck().Problem() ?? "kunnossa (portin omistaa odotettu LM Studio)"}");
+        Console.WriteLine($"LM Studion lokiasetukset: {new LmStudioPrivacyCheck().Problem() ?? "kunnossa"}");
+        Console.WriteLine($"Outlook-luokat: {settings.CategoryMode}");
         return 0;
     }
 
@@ -271,7 +416,10 @@ internal static class Program
         using var store = OpenStore();
         using var outlook = new OutlookMailbox();
         var hits = new Dictionary<string, int>();
+        var senderHits = new Dictionary<string, int>();
+        var withHeader = new Dictionary<string, int>();
         var totals = new Dictionary<string, int>();
+        var signals = new Dictionary<string, int>();
         foreach (var item in store.GetReviewItems())
         {
             var read = await outlook.ReadAsync(item.Reference, item.Mailbox, CancellationToken.None);
@@ -285,14 +433,32 @@ internal static class Program
             {
                 hits[item.Mailbox] = hits.GetValueOrDefault(item.Mailbox) + 1;
             }
+
+            var sender = SenderAuthentication.Evaluate(m.SenderName, m.SenderAddress, m.Headers);
+            if (sender.Dmarc is not null || sender.Spf is not null)
+            {
+                withHeader[item.Mailbox] = withHeader.GetValueOrDefault(item.Mailbox) + 1;
+            }
+
+            if (sender.Suspicious)
+            {
+                senderHits[item.Mailbox] = senderHits.GetValueOrDefault(item.Mailbox) + 1;
+                foreach (var signal in sender.Signals)
+                {
+                    signals[signal] = signals.GetValueOrDefault(signal) + 1;
+                }
+            }
         }
 
+        Console.WriteLine("  laatikko: ohjailuheuristiikka / lähettäjäsignaali / tunnistusotsake löytyi / viestejä");
         foreach (var (mailbox, total) in totals.OrderBy(kv => kv.Key))
         {
-            Console.WriteLine($"  {mailbox}: {hits.GetValueOrDefault(mailbox)}/{total}");
+            Console.WriteLine($"  {mailbox}: {hits.GetValueOrDefault(mailbox)} / {senderHits.GetValueOrDefault(mailbox)} / {withHeader.GetValueOrDefault(mailbox)} / {total}");
         }
 
-        Console.WriteLine($"Heuristiikka osui {hits.Values.Sum()} viestiin {totals.Values.Sum()}:stä.");
+        Console.WriteLine($"Ohjailuheuristiikka osui {hits.Values.Sum()} viestiin, lähettäjäsignaali {senderHits.Values.Sum()} viestiin, " +
+                          $"yhteensä {totals.Values.Sum()} viestiä.");
+        PrintCounts("Lähettäjäsignaalit", signals);
         return 0;
     }
 

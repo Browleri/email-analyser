@@ -1,6 +1,7 @@
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace EmailAnalyser.Core.Storage;
 
@@ -55,13 +56,43 @@ public sealed record AppSettings
     public int BatchMaxMinutes { get; init; } = 15;
     public string LmStudioUrl { get; init; } = "http://127.0.0.1:1234";
     public string Automatic1111Url { get; init; } = "http://127.0.0.1:7860";
+    /// <summary>The program that must own the model server's port (checked before each batch).</summary>
+    public string LmStudioExecutable { get; init; } = LoopbackPortOwnerCheck.DefaultLmStudioExecutable;
 
-    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    // Continuous monitoring (phase 5).
+    public int MonitorIntervalMinutes { get; init; } = 2;
+    public int BatchMinQueue { get; init; } = 10;
+    public int BatchMaxWaitMinutes { get; init; } = 20;
+    public int DeferRetryMinutes { get; init; } = 5;
+    public int CatchUpDays { get; init; } = 3;
+    public int ScanMaxPerStore { get; init; } = 300;
+    public int ScanOverlapMinutes { get; init; } = 60;
+    public int RetentionDays { get; init; } = 90;
+
+    /// <summary>Outlook categories: off by default; "test" writes only to the message with <see cref="CategoryTestSubject"/>.</summary>
+    public CategoryMode CategoryMode { get; init; } = CategoryMode.Off;
+    public string CategoryTestSubject { get; init; } = "AI: testiviesti";
+
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+    };
 
     public static AppSettings Load(string path) =>
         File.Exists(path) ? JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), Json) ?? new AppSettings() : new AppSettings();
 
-    public void Save(string path) => File.WriteAllText(path, JsonSerializer.Serialize(this, Json));
+    public void Save(string path)
+    {
+        // Write and rename, so a crash cannot leave a half-written settings file.
+        var temp = path + ".tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(this, Json));
+        File.Move(temp, path, overwrite: true);
+    }
 
     public ClassifierOptions ToClassifierOptions() => new(MaxBodyChars, MaxTokens, ContextLength);
+
+    public IServerIdentityCheck ToIdentityCheck() =>
+        new LoopbackPortOwnerCheck(LoopbackGuard.Ensure(LmStudioUrl).Port, LmStudioExecutable);
 }

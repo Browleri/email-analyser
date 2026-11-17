@@ -205,8 +205,9 @@ public class BatchRunnerTests
         public FakeGpu Gpu { get; } = new();
         public FakeSource Source { get; } = new();
 
-        public BatchRunner Runner() =>
-            new(Store, Server, Gpu, Source, new Classifier(Server, PromptTemplate.LoadEmbedded(), new ClassifierOptions()), TimeProvider.System);
+        public BatchRunner Runner(IServerIdentityCheck? identity = null, TimeProvider? time = null) =>
+            new(Store, Server, Gpu, Source, new Classifier(Server, PromptTemplate.LoadEmbedded(), new ClassifierOptions()), time ?? TimeProvider.System,
+                identity: identity);
 
         public void Dispose()
         {
@@ -223,6 +224,8 @@ public class BatchRunnerTests
         /// <summary>Called with the 1-based chat number; a returned exception is thrown.</summary>
         public Func<int, ModelServerException?>? ChatFailure { get; set; }
         public string Answer { get; set; } = GoodAnswer;
+        /// <summary>When set, the response claims this model instead of the requested instance.</summary>
+        public string? AnsweringModel { get; set; }
         public int Loads { get; private set; }
         public int Unloads { get; private set; }
         public int Chats { get; private set; }
@@ -257,7 +260,7 @@ public class BatchRunnerTests
 
             return FailChat
                 ? throw new ModelServerException("LM Studio ei vastannut ajoissa.")
-                : Task.FromResult(new ChatResponse(Answer, "stop", 100, 50, TimeSpan.FromMilliseconds(10)));
+                : Task.FromResult(new ChatResponse(Answer, "stop", 100, 50, TimeSpan.FromMilliseconds(10), AnsweringModel ?? request.Instance));
         }
     }
 
@@ -278,11 +281,15 @@ public class BatchRunnerTests
     {
         public HashSet<string> Gone { get; } = [];
         public Func<string, string>? BodyFor { get; set; }
+        public Func<string, string>? SubjectFor { get; set; }
+        public string Headers { get; set; } = "";
+        public bool Unavailable { get; set; }
 
         public Task<MessageReadResult> ReadAsync(MessageReference reference, string mailbox, CancellationToken ct) =>
+            Unavailable ? throw new MessageSourceUnavailableException("Outlook ei ole käynnissä.") :
             Task.FromResult(Gone.Contains(reference.EntryId)
                 ? MessageReadResult.Gone()
                 : MessageReadResult.Found(new MessageForAssessment(mailbox, "Lähettäjä", "a@example.fi", "Minä", "", DateTimeOffset.UtcNow,
-                    "Otsikko", BodyFor?.Invoke(reference.EntryId) ?? "Runko")));
+                    SubjectFor?.Invoke(reference.EntryId) ?? "Otsikko", BodyFor?.Invoke(reference.EntryId) ?? "Runko", Headers: Headers)));
     }
 }

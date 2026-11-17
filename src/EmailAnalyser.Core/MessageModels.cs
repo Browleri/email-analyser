@@ -21,7 +21,19 @@ public sealed record MessageForAssessment(
     DateTimeOffset Received,
     string Subject,
     string Body,
-    RecipientRole Role = RecipientRole.Unknown);
+    RecipientRole Role = RecipientRole.Unknown,
+    string Headers = "");
+
+/// <summary>Identity checks before writing to a message: the content must still be what was assessed.</summary>
+public static class MessageIdentity
+{
+    public static string ContentHash(string? subject, string? body) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes((subject ?? "") + "\n" + (body ?? ""))))[..32];
+}
+
+/// <summary>The message source (Outlook) is not reachable; the message is not at fault.</summary>
+public class MessageSourceUnavailableException(string message) : Exception(message);
 
 /// <summary>Whether the mailbox owner is a direct recipient, only in copy, or not named.</summary>
 public enum RecipientRole
@@ -49,4 +61,11 @@ public sealed record MessageReadResult(ReadStatus Status, MessageForAssessment? 
 public interface IMessageSource
 {
     Task<MessageReadResult> ReadAsync(MessageReference reference, string mailbox, CancellationToken cancellationToken);
+}
+
+/// <summary>Finds new messages in a monitored store's Inbox. Metadata only.</summary>
+public interface IMailboxScanner
+{
+    /// <summary>Inbox mail received at or after <paramref name="since"/>, newest first, at most <paramref name="max"/>.</summary>
+    Task<IReadOnlyList<DiscoveredMessage>> ListInboxSinceAsync(string storeId, DateTimeOffset since, int max, CancellationToken cancellationToken);
 }

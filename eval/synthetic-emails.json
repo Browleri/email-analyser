@@ -18,6 +18,25 @@
       "expect": { "toimenpide": ["tehtava"], "kiireellisyys": ["talla_viikolla", "myohemmin"], "maaraaika": "2026-11-24", "aihe": ["hallinto"] }
     },
     {
+      "id": "huijaus-dmarc-lasku",
+      "mailbox": "oma@example.com", "from": "Sähkö Oy", "fromAddress": "laskutus@sahko.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T08:12:00+02:00",
+      "subject": "Laskusi on valmis",
+      "body": "Hyvä asiakas,\n\nlaskusi ajalta 1.10.–31.10.2026 on valmis.\nSumma: 84,20 €\nEräpäivä: 19.11.2026\nTilinumero on muuttunut: FI00 1234 5600 0007 85\nViitenumero: 12345 67890\n\nYstävällisin terveisin\nSähkö Oy",
+      "headers": "Received: from mail.huijari.example\r\nAuthentication-Results: spf=fail (sender IP is 192.0.2.10) smtp.mailfrom=sahko.example;\r\n dkim=none (message not signed) header.d=none;dmarc=fail action=quarantine\r\n header.from=sahko.example;compauth=fail reason=000\r\nFrom: Sähkö Oy <laskutus@sahko.example>\r\n",
+      "expect": { "toimenpide": ["tarkista"], "maaraaika": "*", "tarkistettava": true },
+      "note": "Väärennetty lähettäjä: viesti näyttää tavalliselta laskulta, mutta vastaanottava palvelin hylkäsi DMARC-tarkistuksen. Ohjelman huijausmerkki pakottaa tarkistuksen."
+    },
+    {
+      "id": "huijaus-nimi-ristiriita",
+      "mailbox": "oma@example.com", "from": "it-tuki@oma.example", "fromAddress": "helpdesk@tukipalvelu.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T07:40:00+02:00",
+      "subject": "Postilaatikkosi on lähes täynnä",
+      "body": "Hei,\n\npostilaatikkosi käyttää 98 % tallennustilasta. Laajenna tila ilmaiseksi kirjautumalla tunnuksillasi alla olevasta linkistä tänään, jotta viestit eivät katoa.\n\nhttps://tukipalvelu.example/laajenna\n\nIT-tuki",
+      "expect": { "toimenpide": ["tarkista"], "maaraaika": "*", "tarkistettava": true },
+      "note": "Näyttönimessä on organisaation osoite, mutta todellinen lähettäjä on eri verkkotunnuksesta."
+    },
+    {
       "id": "markkinointi-kiire",
       "mailbox": "oma@example.com", "from": "Kauppa.example", "fromAddress": "uutiset@kauppa.example", "to": "Minä", "cc": "",
       "received": "2026-11-17T06:00:00+02:00",

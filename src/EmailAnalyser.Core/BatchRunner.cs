@@ -10,6 +10,12 @@ public enum BatchOutcome
     Stopped,
 }
 
+public static class BatchStopReasons
+{
+    public const string MaxDuration = "erän enimmäiskesto täyttyi";
+    public const string Cancelled = "keskeytetty";
+}
+
 public sealed record BatchResult(BatchOutcome Outcome, string? Reason, int Assessed, int Invalid, int Unavailable, int Remaining, int Failed = 0);
 
 public sealed record BatchOptions(string ModelKey, int MaxMessages = 200, TimeSpan? MaxDuration = null)
@@ -33,7 +39,8 @@ public sealed class BatchRunner(
     Classifier classifier,
     TimeProvider time,
     IGpuMemoryProbe? gpuMemory = null,
-    IPrivacyCheck? privacy = null)
+    IPrivacyCheck? privacy = null,
+    IServerIdentityCheck? identity = null)
 {
     public async Task<BatchResult> RunAsync(BatchOptions options, Action<MessageProgress>? progress, CancellationToken cancellationToken)
     {
@@ -68,7 +75,7 @@ public sealed class BatchRunner(
                 cancellationToken.ThrowIfCancellationRequested();
                 if (time.GetUtcNow() >= deadline)
                 {
-                    (outcome, reason) = (BatchOutcome.Stopped, "erän enimmäiskesto täyttyi");
+                    (outcome, reason) = (BatchOutcome.Stopped, BatchStopReasons.MaxDuration);
                     break;
                 }
 
@@ -128,9 +135,14 @@ public sealed class BatchRunner(
         {
             (outcome, reason) = (BatchOutcome.Stopped, ex.Message);
         }
+        catch (MessageSourceUnavailableException ex)
+        {
+            // Outlook closed or disconnected: the remaining messages stay queued without an attempt counted.
+            (outcome, reason) = (BatchOutcome.Stopped, ex.Message);
+        }
         catch (OperationCanceledException)
         {
-            (outcome, reason) = (BatchOutcome.Stopped, "keskeytetty");
+            (outcome, reason) = (BatchOutcome.Stopped, BatchStopReasons.Cancelled);
         }
         finally
         {
@@ -152,6 +164,11 @@ public sealed class BatchRunner(
         if (privacy?.Problem() is { } privacyProblem)
         {
             return privacyProblem;
+        }
+
+        if (identity?.Problem() is { } identityProblem)
+        {
+            return identityProblem;
         }
 
         if (await gpuActivity.IsGeneratingAsync(cancellationToken))

@@ -1,6 +1,6 @@
 # Tietoturvan arviointi
 
-Paikallinen AI-avustaja Classic Outlookiin. Arvio 17.11.2026, kattaa vaiheiden 0–3 toteutuksen (haara `feature/outlook-ai`) ja ajoympäristön koti-pc. Arvio päivitetään ennen vaihetta 5 (Outlook-luokkien kirjoitus), ennen käyttöönottoa (vaihe 6) ja aina, kun sovellukseen lisätään verkkoyhteys, työkaluja tai kirjoitusoikeus.
+Paikallinen AI-avustaja Classic Outlookiin. Arvio tehtiin 17.11.2026 vaiheiden 0–3 toteutuksesta, ja se päivitettiin samana päivänä vaiheen 5 (jatkuva seuranta ja Outlook-luokkien kirjoitus) jälkeen. Arvio kattaa haaran `feature/outlook-ai` ja ajoympäristön koti-pc. Arvio päivitetään ennen käyttöönottoa (vaihe 6) ja aina, kun sovellukseen lisätään verkkoyhteys, työkaluja tai kirjoitusoikeus.
 
 ## Yhteenveto
 
@@ -12,7 +12,9 @@ Suurin sovelluskohtainen uhka on sähköpostiin upotettu kehoteinjektio. Nykyise
 
 Injektio voi siis saada viestin näyttämään vähemmän tai enemmän tärkeältä tai saada AI-yhteenvedon tekemään huijauksesta uskottavamman. Se ei voi lähettää, poistaa tai siirtää viestejä eikä viedä tietoja koneelta.
 
-Arvioinnissa löytyi toteutuksesta kymmenen korjattavaa kohtaa (F1–F10). Ne on korjattu ja testattu. Vakavimmat olivat:
+Vaihe 5 lisäsi ainoan kirjoitusoikeuden: sovellus voi lisätä ja poistaa M365-viesteistä neljä omaa `AI:`-luokkaansa. Kirjoitus on oletuksena pois päältä. Luokka valitaan kiinteästä taulukosta, ja ohjailuyritys tai epäonnistunut lähettäjän tunnistus johtaa aina luokkaan `AI: Tarkista`. Kohde tarkistetaan Message-ID:n ja sisältötiivisteen perusteella, ja jokainen muutos voidaan palauttaa. Mallin tekstiä ei kirjoiteta Outlookiin.
+
+Arvioinnissa löytyi toteutuksesta kymmenen korjattavaa kohtaa (F1–F10) ja vaiheen 5 toteutuksessa kuusi lisää (F11–F16). Ne on korjattu ja testattu. Vakavimmat olivat:
 - hyökkäystestauksessa malli totteli viestiin upotettua väärennettyä järjestelmäohjetta, ja maksuhuijaus luokiteltiin "tehtävä tänään" -viestiksi (F10). Nyt ohjailua sisältävä viesti ohjataan aina tarkistettavaksi,
 - yksittäinen viesti pystyi pysäyttämään koko käsittelyn (F1),
 - LM Studion kehotteiden lokitus olisi voinut palata päälle huomaamatta (F8),
@@ -44,7 +46,7 @@ flowchart LR
     L -->|JSON-arvio<br/>EI LUOTETTU| A
     A -->|salattu| D[(analyser.db)]
     D --> U[WPF-näkymä]
-    A -. vaihe 5: vain omat AI-luokat .-> O
+    A -->|vain omat AI-luokat, kiinteä taulukko<br/>Message-ID ja tiiviste tarkistettu<br/>oletuksena pois| O
     LAN[Lähiverkon laitteet] -->|todentamaton API<br/>0.0.0.0:1234| L
     C[Claude Code -istunto] -->|komentojen tuloste| CL[Pilvipalvelu]
     A -. vain metatiedot .-> C
@@ -78,10 +80,10 @@ Todennäköisyys (T) ja vaikutus (V) ovat asteikolla 1–3. Taso on T × V: 1–
 | ID | Riski ja skenaario | Nykyiset suojaukset | Ennen | Nyt | Jatkotoimet |
 | --- | --- | --- | --- | --- | --- |
 | R1 | **Viestin piilottaminen.** Viesti ohjeistaa mallia luokittelemaan sen tiedoksi, jotta käyttäjä ei huomaa sitä. Hyökkäystestissä onnistui väärennetyllä erottimella ennen korjausta F10. | Toimenpide on enum-arvo ja ohjelma tarkistaa sen. Järjestelmäkehote kieltää noudattamasta viestin ohjeita. Ohjailuheuristiikka (F4, F10) pakottaa tarkista-tilan. Kaikki viestit näkyvät listassa. Löytymisosuus mitataan vaiheessa 3. | 3×2=6 | 2×2=4 | Heuristiikka ei tunnista tuntemattomia muotoja; lisätään uusia hyökkäystapauksia testiaineistoon, kun niitä havaitaan |
-| R2 | **Kalastelun uskottavuuden vahvistaminen.** Huijausviesti saa AI-yhteenvedon kuulostamaan viralliselta ("pankki pyytää vahvistamaan tunnukset tänään"). Käyttäjä luottaa tekoälyn ilmeiseen tarkistukseen. | Kehotteen sääntö: kalastelu on aina tarkista. Ohjailuheuristiikka ja varoitusbanneri. Näkymä näyttää lähettäjän osoitteen ja pysyvän varoituksen, että arvio on mallin ehdotus. Linkit poistetaan sekä mallin syötteestä että tulosteesta (F6). | 2×3=6 | 2×2=4 | Vaihe 5: ohjelmallinen, mallista riippumaton huijausmerkki viestin otsakkeista (SPF-, DKIM- ja DMARC-tulos `Authentication-Results`-otsakkeesta, näyttönimen ja verkkotunnuksen ristiriita) |
+| R2 | **Kalastelun uskottavuuden vahvistaminen.** Huijausviesti saa AI-yhteenvedon kuulostamaan viralliselta ("pankki pyytää vahvistamaan tunnukset tänään"). Käyttäjä luottaa tekoälyn ilmeiseen tarkistukseen. | Kehotteen sääntö: kalastelu on aina tarkista. Ohjailuheuristiikka ja varoitusbanneri. Näkymä näyttää lähettäjän osoitteen ja pysyvän varoituksen, että arvio on mallin ehdotus. Linkit poistetaan sekä mallin syötteestä että tulosteesta (F6). Vaihe 5: mallista riippumaton huijausmerkki (`SenderAuthentication`). Vastaanottavan palvelimen ylin `Authentication-Results`-otsake (DMARC-, compauth- tai SPF-hylkäys) tai näyttönimessä oleva vieras osoite pakottaa tarkistuksen, luokan `AI: Tarkista` ja punaisen varoituksen. | 2×3=6 | 1×2=2 | Seurataan signaalin osumia (`injection-scan`). Rajoitus: verkkotunnuksen vertailu käyttää kahta viimeistä osaa, joten esim. `co.uk`-tunnukset eivät erotu. Viesti, jonka lähettäjän tunnistus on kunnossa (esim. kaapattu aito tili), ei saa merkkiä |
 | R3 | **Tekaistu kiire.** Markkinointi- tai roskaviesti ohjeistaa merkitsemään itsensä vastattavaksi tänään. Käyttäjän huomio kuluu turhaan. | Kehotteen sääntö markkinoinnin kiireestä ja ohjailuheuristiikka. | 2×1=2 | 2×1=2 | Hyväksytty |
 | R4 | **Harhaanjohtava teksti näkymässä.** Mallin teksti sisältää linkin, ohjeen tai kirjoitussuuntamerkeillä naamioidun nimen. | WPF näyttää tekstin pelkkänä tekstinä ilman napsautettavia linkkejä tai HTML:ää. `SafeText` poistaa ohjaus- ja suuntamerkit (F3) ja korvaa linkit isäntänimellä (F6). Yhteenvedon pituus on enintään 600 merkkiä ja perustelun 1 000. | 2×2=4 | 1×2=2 | – |
-| R5 | **Outlook-kirjoitusten ohjailu (vaihe 5).** Injektio yrittää saada sovelluksen kirjoittamaan Outlookiin jotain muuta kuin oman luokan. | Toteuttamatta. Suunnitelman vaatimukset: vain neljä omaa `AI:`-luokkaa kiinteästä taulukosta, kohde tietokannan EntryID:stä, ei koskaan mallin vapaata tekstiä. | – | 1×1=1 | Vaatimukset kirjattu kohtaan "Avoimet toimenpiteet". Testi ennen vaiheen 5 hyväksyntää |
+| R5 | **Outlook-kirjoitusten ohjailu.** Injektio yrittää saada sovelluksen kirjoittamaan Outlookiin jotain muuta kuin oman luokan tai muuttamaan väärää viestiä. | `AiCategories`: luokka valitaan kiinteästä taulukosta toimenpiteen enum-arvon perusteella, ja `Apply` hylkää kaikki muut nimet. Ohjailuyritys tai huijausmerkki johtaa aina luokkaan `AI: Tarkista`. Kohde haetaan tietokannan EntryID:llä, ja Message-ID sekä sisältötiiviste tarkistetaan ennen kirjoitusta. Sovitin ei tarjoa muuta kirjoitusta kuin luokat, eikä mallin tekstiä kirjoiteta Outlookiin. | 2×2=4 | 1×1=1 | – |
 | R6 | **Toimintavalta.** Jos malli saisi työkalukutsuja, injektio voisi käynnistää toimintoja. | Pyynnöissä ei ole `tools`- tai MCP-määrityksiä. Outlook-sovitin tarjoaa vain luvun, luettelon ja avauksen; lähetys, poisto ja siirto puuttuvat kokonaan. | 3×3=9 | 1×3=3 | Pysyvä sääntö: mallille ei anneta työkaluja. Muutos vaatii uuden tietoturva-arvion |
 | R7 | **Viestien välinen vaikutus.** Injektio yhdessä viestissä vaikuttaa muiden arvioihin. | Jokainen pyyntö on tilaton: järjestelmäkehote ja yksi viesti. Keskusteluhistoriaa ei ole. | 2×2=4 | 1×2=2 | – |
 | R8 | **Rakenteen rikkominen.** Viesti sisältää väärennetyn erottimen `<<<VIESTI PÄÄTTYY>>>` ja tekaistun järjestelmäohjeen. Hyökkäystestissä malli totteli tätä, vaikka erottimet oli neutraloitu. | Erottimet neutraloidaan rungosta ja kaikista metatietokentistä. F10: heuristiikka tunnistaa väärennetyn erottimen ja keskustelupohjan merkit ja pakottaa tarkistuksen. | 3×2=6 | 1×2=2 | Seurataan tapausta `hyokkays-vale-erotin` jokaisessa vertailussa |
@@ -97,10 +99,10 @@ Todennäköisyys (T) ja vaikutus (V) ovat asteikolla 1–3. Taso on T × V: 1–
 | R13 | **Levyn ja varmuuskopioiden luku.** Kone tai levy varastetaan, tai tiedostoja kopioidaan. | Tietokanta salattu (SQLCipher 4), avain DPAPI-suojattu, viestien runkoja ei tallenneta. Levyn salaus puuttuu, ja OST-tiedostot (7,4 Gt) ovat selväkielisinä. | 2×3=6 | 2×2=4 sovelluksen osalta | Koneen tasolla: Windows 11 Pro ja BitLocker (käyttäjän päätös) |
 | R14 | **Toiset paikalliset tilit.** Ryhmällä `CodexSandboxUsers` (tilit `CodexSandboxOffline` ja `CodexSandboxOnline`) on peritty lukuoikeus `AppData\Local`-kansioon, myös Outlookin OST-tiedostoihin ja aiemmin sovelluksen datakansioon. Hiekkalaatikossa ajettu koodi voi lukea kaikki välimuistissa olevat sähköpostit. | Sovelluksen datakansio on nyt yksityinen: ei periytyviä oikeuksia, vain `kortt` ja SYSTEM (F9). Tietokanta on salattu, eikä DPAPI-avainta voi purkaa toisella tilillä. | 2×3=6 | Sovellus 1×2=2; OST 2×3=6 | **Käyttäjän päätös:** poista ryhmän lukuoikeus `AppData`-kansiosta tai Codex-hiekkalaatikko, jos sitä ei käytetä |
 | R15 | **Järjestelmänvalvojatilit ja runner.** `Martti-local` on järjestelmänvalvoja ja ajaa itse ylläpidettyä GitHub Actions -runneria. Kompromissoitu työnkulku saa koneen täydet oikeudet, myös käyttäjän `kortt` tiedostot. | Ei sovelluksen hallinnassa. DPAPI estää tietokannan suoran purun, mutta ei järjestelmänvalvojan kaikkia keinoja. | 1×3=3 | 1×3=3 | **Käyttäjän päätös:** runner tavalliselle tilille; vain luotetut työnkulut |
-| R16 | **Lähiverkon pääsy LM Studioon.** Todentamaton rajapinta kuuntelee osoitteessa `0.0.0.0:1234`. Lähiverkon laite voi purkaa sovelluksen mallin kesken erän tai ladata tilalle toisen mallin samalla tunnisteella, jolloin arviot tulevat hyökkääjän valitsemalta mallilta. Kehotteita se ei näe, koska lokitus on pois. | Erä tarkistaa ennen latausta, ettei muuta mallia ole ladattuna. Virheet keskeyttävät erän. | 1×2=2 | 1×2=2 | Suositus: LM Studion API-avain ja palomuurisääntö vain Ulliksesta (koskee myös Prompteria). Vaihe 5: tarkistetaan vastauksen `model`-kenttä |
-| R17 | **Loopback-portin kaappaus.** Kun LM Studio ei ole käynnissä, mikä tahansa paikallinen prosessi voi kuunnella porttia 127.0.0.1:1234 ja saada viestien sisällön. | Erä käynnistyy vain, jos palvelin vastaa LM Studion rajapinnan muodossa. Se ei todista palvelimen aitoutta. | 1×3=3 | 1×3=3 | Vaihe 5: tarkista ennen lähetystä, että portin omistaa `LM Studio.exe` |
+| R16 | **Lähiverkon pääsy LM Studioon.** Todentamaton rajapinta kuuntelee osoitteessa `0.0.0.0:1234`. Lähiverkon laite voi purkaa sovelluksen mallin kesken erän tai ladata tilalle toisen mallin samalla tunnisteella, jolloin arviot tulevat hyökkääjän valitsemalta mallilta. Kehotteita se ei näe, koska lokitus on pois. | Erä tarkistaa ennen latausta, ettei muuta mallia ole ladattuna. Virheet keskeyttävät erän. Vaihe 5: jokaisen vastauksen `model`-kentän pitää olla sovelluksen lataama instanssi, muuten erä pysähtyy ja viestit jäävät jonoon. Tämä ei havaitse mallia, joka on ladattu samalla tunnisteella. | 1×2=2 | 1×2=2 | Suositus: LM Studion API-avain ja palomuurisääntö vain Ulliksesta (koskee myös Prompteria) |
+| R17 | **Loopback-portin kaappaus.** Kun LM Studio ei ole käynnissä, mikä tahansa paikallinen prosessi voi kuunnella porttia 127.0.0.1:1234 ja saada viestien sisällön. | Vaihe 5: `LoopbackPortOwnerCheck` on erän esiehto. Kaikkien portin kuuntelijoiden (IPv4 ja IPv6) pitää olla asetuksissa nimetty `LM Studio.exe` (oletus `%LOCALAPPDATA%\Programs\LM Studio`), muuten erä lykätään. Todettu oikealla koneella. | 1×3=3 | 1×2=2 | Tarkistus tehdään erän alussa. Jos LM Studio kaatuu kesken erän ja toinen ohjelma ehtii varata portin, seuraava pyyntö menee sille; `model`-kentän tarkistus pysäyttää erän ensimmäiseen vastaukseen |
 | R18 | **Varmuuskopiointi pilveen.** Tietokanta lisätään myöhemmin restic-varmuuskopioihin, joista taso 3 menee Cloudflare R2:een. | Tietokanta ei kuulu varmuuskopioihin. | 2×2=4 | 1×2=2 | Jos lisätään: vain lähiverkon tasot, kuten Kertaus-palvelussa |
-| R19 | **Säilytys.** Arviot kertyvät tietokantaan pysyvästi, vaikka suunnitelman oletus on 90 päivää. | Toteuttamatta. | 3×1=3 | 3×1=3 | Vaihe 5: säilytysajan mukainen poisto |
+| R19 | **Säilytys.** Arviot kertyvät tietokantaan pysyvästi, vaikka suunnitelman oletus on 90 päivää. | Vaihe 5: seuranta poistaa kerran vuorokaudessa yli 90 päivää vanhat viestit arvioineen (`ApplyRetention`). Merkityistä viesteistä ja viesteistä, joissa on sovelluksen luokka, säilytetään vain tunnisteet ja luokat; otsikko, lähettäjä, yhteenveto ja perustelu poistetaan. `secure_delete` ylikirjoittaa poistetut rivit (F15). | 3×1=3 | 1×1=1 | – |
 
 ### C. Saatavuus
 
@@ -108,16 +110,19 @@ Todennäköisyys (T) ja vaikutus (V) ovat asteikolla 1–3. Taso on T × V: 1–
 | --- | --- | --- | --- | --- | --- |
 | R20 | **Myrkkyviesti.** Viesti, jonka palvelin hylkää (liikaa tokeneita, esim. emoji- tai CJK-teksti) tai joka aikakatkaisee pyynnön, pysäytti jokaisen erän samaan kohtaan, joten käsittely jumittui kokonaan. | F1: virhetyypit erotetaan. Hylätty viesti merkitään epäonnistuneeksi, jos palvelin toimi samassa erässä. Aikakatkaisut lasketaan viestille, ja kolmannen jälkeen viesti epäonnistuu. Palvelimen saavuttamattomuutta ei lasketa viestille. | 2×2=4 | 1×1=1 | – |
 | R21 | **Valtava viesti.** Megatavujen viesti kuluttaa muistia ja säännöllisten lausekkeiden aikaa. | F2: raakateksti katkaistaan 100 000 merkkiin ennen käsittelyä, ja lausekkeilla on aikaraja. | 2×2=4 | 1×1=1 | – |
-| R22 | **Viestitulva.** Roskapostitulva täyttää jonon ja vie näytönohjaimen ajan. | Erän koko ja kesto on rajattu. | 2×1=2 | 2×1=2 | Vaihe 5: sääntöosumat (uutiskirjeet) ohittavat mallin |
-| R23 | **Pysyvä lykkäys.** Automatic1111 tai lähiverkon käyttäjä pitää näytönohjaimen jatkuvasti varattuna. | Erä lykkääntyy, ja syy näkyy tilarivillä. | 2×1=2 | 2×1=2 | Vaihe 5: varoitus, jos lykkäys kestää yli tunnin |
+| R22 | **Viestitulva.** Roskapostitulva täyttää jonon ja vie näytönohjaimen ajan. | Erän koko ja kesto on rajattu. Seuranta käsittelee yhden erän kierrosta kohden, joten näytönohjain vapautuu erien välillä. Ensimmäinen kiinniotto on rajattu kolmeen päivään ja 300 viestiin laatikkoa kohden. | 2×1=2 | 2×1=2 | Myöhemmin: sääntöosumat (uutiskirjeet) ohittavat mallin |
+| R23 | **Pysyvä lykkäys.** Automatic1111 tai lähiverkon käyttäjä pitää näytönohjaimen jatkuvasti varattuna. | Erä lykkääntyy, ja syy näkyy tilarivillä. Vaihe 5: uusi yritys aikaisintaan 5 minuutin kuluttua, ja yli tunnin lykkäys näkyy korostettuna varoituksena. | 2×1=2 | 2×1=2 | – |
 
 ### D. Eheys
 
 | ID | Riski ja skenaario | Nykyiset suojaukset | Ennen | Nyt | Jatkotoimet |
 | --- | --- | --- | --- | --- | --- |
-| R24 | **Luokka väärään viestiin (vaihe 5).** Viesti on siirretty tai sen EntryID on vanhentunut. | Pitkäaikaiset EntryID:t (vaihe 1). Suunnitelman mukaan Message-ID ja sisältötiiviste tarkistetaan ennen kirjoitusta. | 2×2=4 | 1×2=2 | Testataan vaiheessa 5 |
-| R25 | **Lukutilan muuttuminen.** | Todettu vaiheessa 1, ettei luku muuta lukutilaa. Avaus Outlookissa merkitsee luetuksi tarkoituksella. | 1×1=1 | 1×1=1 | – |
-| R26 | **Merkintöjen ylikirjoitus.** Uusi arvio korvaa käyttäjän merkinnän. | Merkinnät ovat omassa taulussaan, eikä uudelleenarviointi muuta niitä. | 2×2=4 | 1×1=1 | – |
+| R24 | **Luokka väärään viestiin.** Viesti on siirretty tai sen EntryID on vanhentunut. | Pitkäaikaiset EntryID:t (vaihe 1). Ennen kirjoitusta viesti luetaan uudelleen, ja sen Message-ID:n ja sisältötiivisteen (otsikko ja runko, SHA-256) pitää vastata arvioitua. Ristiriidassa ei kirjoiteta eikä yritetä uudelleen samalla arviolla. Poistunut viesti ohitetaan. | 2×2=4 | 1×1=1 | – |
+| R25 | **Lukutilan muuttuminen.** | Todettu vaiheessa 1, ettei luku eikä luokan tallennus muuta lukutilaa. Vaihe 5: kirjoitus tarkistaa lukutilan tallennuksen jälkeen, palauttaa sen tarvittaessa ja kirjaa huomion. Avaus Outlookissa merkitsee luetuksi tarkoituksella. | 1×1=1 | 1×1=1 | – |
+| R26 | **Merkintöjen ylikirjoitus.** Uusi arvio korvaa käyttäjän merkinnän. | Merkinnät ovat omassa taulussaan, eikä uudelleenarviointi muuta niitä. Outlook-luokka seuraa käyttäjän merkintää ennen mallin arviota. | 2×2=4 | 1×1=1 | – |
+| R30 | **Kilpailu käyttäjän kanssa.** Sovellus lisää uudelleen luokan, jonka käyttäjä poisti, tai muuttaa luokkia jokaisella kierroksella. | Jokaisen viestin tavoiteluokka ja oma luokka tallennetaan (`category_state`). Sama muutos tehdään vain kerran. Käyttäjän poistamaa luokkaa ei lisätä uudelleen, ennen kuin arvio tai merkintä muuttuu. Epäonnistunutta kirjoitusta yritetään enintään kolmesti. Vain sovelluksen itse lisäämä luokka poistetaan. | 3×2=6 | 1×1=1 | – |
+| R31 | **Väärä luokka ohjaa käyttäjää.** Tärkeä viesti saa luokan `AI: Tiedoksi`, ja käyttäjä ohittaa sen Outlookissa katsomatta näkymää. | Kirjoitus on oletuksena pois päältä, ja testitila rajaa sen yhteen viestiin. Ohjailu ja huijausmerkki johtavat luokkaan `AI: Tarkista`. Käyttäjän korjaus vaihtaa luokan. `categories rollback` poistaa kaikki sovelluksen luokat. | 2×2=4 | 2×2=4 | Kirjoitusta kaikkiin viesteihin ei kytketä päälle, ennen kuin vaiheen 3 löytymisosuus on mitattu käyttäjän merkinnöistä |
+| R32 | **Palautuksen ulottumattomiin jäävät luokat.** Historia katoaa (tietokanta luodaan uudelleen DPAPI-avaimen menetyksen jälkeen), jolloin sovelluksen luokat jäävät viesteihin. | Luokat ovat tunnistettavia (`AI:`-etuliite), ja käyttäjä voi poistaa ne Outlookin luokkahallinnasta. Säilytysaika ei poista viestejä, joissa on sovelluksen luokka. | 1×1=1 | 1×1=1 | – |
 
 ### E. Toimitusketju
 
@@ -141,6 +146,12 @@ Todennäköisyys (T) ja vaikutus (V) ovat asteikolla 1–3. Taso on T × V: 1–
 | F8 | LM Studion lokitus voi palata päälle huomaamatta (R10, R29) | `LmStudioPrivacyCheck` on erän esiehto ja epäonnistuu turvallisesti | `PrivacyCheckTests` |
 | F9 | Datakansio peri hiekkalaatikkotilien lukuoikeuden (R14) | `AppPaths.MakePrivate`: ei periytyviä oikeuksia, vain nykyinen käyttäjä ja SYSTEM | `PrivacyCheckTests` |
 | F10 | Hyökkäystestaus: malli totteli väärennettyä erotinta ja järjestelmäohjetta, eikä heuristiikan merkintä estänyt huijausta saamasta luokkaa "tehtävä tänään" (R1, R2, R8) | Ohjailua sisältävän viestin toimenpide pakotetaan tarkista-tilaan, ja mallin alkuperäinen ehdotus kirjataan perusteluun. Heuristiikka tunnistaa myös väärennetyt erottimet, keskustelupohjan merkit, ohjeita antavat järjestelmärivit ja pyynnöt palauttaa sovelluksen kenttiä | `InjectionHeuristicsTests` (myös väärät hälytykset), `eval`, `injection-scan` |
+| F11 | Outlookin luokkaerotin olisi luettu sovelluksen kulttuurista: suomen `;` vaikka koneen asetus on `,`. Käyttäjän luokka olisi yhdistynyt sovelluksen luokan kanssa yhdeksi nimeksi | Erotin luetaan käyttäjän alueasetuksesta (`HKCU\Control Panel\International\sList`), kuten Outlook tekee | Todettu testiviestillä: `Blue category` säilyi |
+| F12 | Seurannan tilan julkaisu olisi käyttänyt samaa tietokantayhteyttä kuin taustasäie, kun käyttöliittymä keskeyttää seurannan | Tila julkaistaan välimuistista; näkymällä ja seurannalla on omat yhteytensä ja `busy_timeout` | Käännös, `MonitorTests` |
+| F13 | Asetustiedoston kirjoitus kesken lukemisen olisi voinut antaa seurannalle rikkinäisen JSONin | Kirjoitus väliaikaistiedostoon ja vaihto (`File.Move`) | – |
+| F14 | Outlookin sulkeminen tai uudelleenkäynnistys olisi jättänyt sovitimeen vanhentuneen COM-olion, ja jokainen kutsu olisi epäonnistunut | Katkoksen virhekoodit vapauttavat olion. Seuraava kutsu liittyy taas käynnissä olevaan Outlookiin, ja erä pysähtyy laskematta yritystä viestille | `Outlook_going_away_mid_batch_…`, `Outlook_unavailable_…` |
+| F15 | Säilytysajan poistamat rivit olisivat jääneet tietokannan vapaille sivuille | `PRAGMA secure_delete = ON` | – |
+| F16 | Koeajossa "Käsittele nyt" jätti herätteen odottamaan, joten seuraava erä alkoi heti ilman taukoa, eikä näytönohjain vapautunut erien välillä (R22, R23) | Kierros kuluttaa odottavan herätteen alussa | `Process_now_runs_one_round_and_then_waits_for_the_interval` |
 
 ## Hyökkäystapausten tulokset
 
@@ -174,17 +185,27 @@ Kaikki kuusi tapausta päätyivät tarkistettaviksi, ja perustelun alussa on ohj
 
 F10 ei siis estä mallia erehtymästä, vaan varmistaa, ettei erehdys jää huomaamatta. Mallin yhteenveto on edelleen epäluotettava juuri niissä viesteissä, joissa ohjailua on, ja siksi näkymä varoittaa niistä erikseen.
 
-**Jäännösriski:** heuristiikka tunnistaa vain tunnettuja muotoja. Taitavasti muotoiltu injektio, joka ei puhuttele tekoälyä eikä jäljittele kehotetta, voi yhä vaikuttaa luokitteluun (R1, R2). Siksi myös vaiheen 5 ohjelmalliset huijausmerkit (SPF, DKIM, DMARC ja verkkotunnuksen ristiriita) ovat tarpeen, ja Outlookiin kirjoitettavat luokat rajataan kiinteään taulukkoon.
+**Jäännösriski:** heuristiikka tunnistaa vain tunnettuja muotoja. Taitavasti muotoiltu injektio, joka ei puhuttele tekoälyä eikä jäljittele kehotetta, voi yhä vaikuttaa luokitteluun (R1, R2). Siksi vaiheessa 5 lisättiin mallista riippumaton huijausmerkki (DMARC-, compauth- ja SPF-tulos sekä näyttönimen vieras osoite), ja Outlookiin kirjoitettavat luokat rajattiin kiinteään taulukkoon.
+
+## Vaiheen 5 tietoturvavaatimukset
+
+| Vaatimus | Toteutus | Testit ja todentaminen |
+| --- | --- | --- |
+| 1. Luokat vain kiinteästä taulukosta, ei mallin tekstiä | `AiCategories.ByAction`, `Apply` hylkää muut nimet | `CategoryTests`; testiviesti: `Blue category` → `Blue category, AI: Tiedoksi` |
+| 2. Kohde EntryID:llä, Message-ID ja sisältötiiviste tarkistetaan | `OutlookMailbox.ChangeAsync`, tila `Mismatch` | `Changed_message_is_not_written_and_not_retried` |
+| 3. Ohjailuyritykseen vain `AI: Tarkista` | `AiCategories.Desired`; sama koskee huijausmerkkiä | `Desired_category_comes_from_a_fixed_table…` |
+| 4. Portin omistaja ja vastauksen `model`-kenttä | `LoopbackPortOwnerCheck`, `Classifier` | `ServerIdentityTests`; `status` oikealla koneella: portin omistaa LM Studio |
+| 5. Huijausmerkki otsakkeista | `SenderAuthentication` | `SenderAuthenticationTests`; 192 oikeaa viestiä: otsake löytyi 191:stä, signaali osui 2:een (`dmarc_fail`, sama laatikko) |
+| 6. Säilytysaika 90 päivää | `ApplyRetention` kerran vuorokaudessa, `retention`-komento | `Retention_deletes_old_messages_and_redacts_labelled_ones` |
+
+Kahden `dmarc_fail`-osuman aitoutta ei ole tarkistettu, koska agentti ei lue oikeita viestejä. Käyttäjä tarkistaa ne näkymässä, kun ne on arvioitu uudelleen (suodatin "Tarkista").
 
 ## Avoimet toimenpiteet
 
-Ennen vaihetta 5 (Outlook-luokkien kirjoitus) toteutetaan ja testataan:
-1. Luokkien kirjoitus vain kiinteästä taulukosta toimenpide → `AI:`-luokka. Mallin tekstiä ei koskaan kirjoiteta Outlookiin.
-2. Kohde haetaan tietokannan EntryID:llä, ja Message-ID sekä sisältötiiviste tarkistetaan ennen kirjoitusta. Epäselvässä tapauksessa ei kirjoiteta.
-3. Jos viesti on merkitty syystä `ohjailuyritys`, siihen saa kirjoittaa vain luokan `AI: Tarkista`, ei mallin valitsemaa toimenpideluokkaa.
-4. Ennen viestin lähettämistä mallille tarkistetaan, että loopback-portin 1234 omistaa `LM Studio.exe` (R17), ja verrataan vastauksen `model`-kenttää ladattuun instanssiin (R16).
-5. Ohjelmallinen huijausmerkki otsakkeista: SPF-, DKIM- ja DMARC-tulos sekä näyttönimen ja verkkotunnuksen ristiriita (R2).
-6. Säilytysajan mukainen poisto, oletus 90 päivää (R19).
+Ennen kuin luokkien kirjoitus kytketään päälle kaikkiin viesteihin (`categories mode on`):
+1. Vaiheen 3 löytymisosuus ja turhat hälytykset mitataan käyttäjän merkinnöistä (R31).
+2. Käyttäjä tarkistaa kaksi `dmarc_fail`-osumaa: jos ne ovat aitoja uutiskirjeitä, arvioidaan signaalin rajaus (R2).
+3. Käyttäjä tekee seurannan käsikokeet: lepotila, Outlookin sulkeminen ja uudelleenkäynnistys, verkkokatko, LM Studion uudelleenkäynnistys sekä viestin siirto toiseen kansioon kesken jonon (suunnitelman vaihe 5).
 
 Käyttäjän päätettävät, sovelluksen ulkopuoliset:
 - **R14:** Codex-hiekkalaatikon lukuoikeus `AppData\Local`-kansioon (OST-tiedostot).

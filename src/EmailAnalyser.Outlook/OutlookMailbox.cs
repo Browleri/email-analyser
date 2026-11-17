@@ -1,30 +1,43 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using EmailAnalyser.Core;
+using Microsoft.Win32;
 using OL = Microsoft.Office.Interop.Outlook;
 
 namespace EmailAnalyser.Outlook;
 
 public sealed record StoreInfo(int Number, string StoreId, string DisplayName, string Kind);
 
-public sealed class OutlookUnavailableException(string message) : Exception(message);
+public sealed class OutlookUnavailableException(string message) : MessageSourceUnavailableException(message);
 
 /// <summary>
 /// Outlook through its object model in the user's own session. Attaches to a
 /// running Outlook only, reads metadata through Folder.GetTable, never marks
-/// messages read, and returns plain data (no COM objects) to callers.
+/// messages read, and returns plain data (no COM objects) to callers. If Outlook
+/// is closed or restarted, the next call attaches again.
 /// </summary>
-public sealed class OutlookMailbox : IMessageSource, IDisposable
+public sealed class OutlookMailbox : IMessageSource, IMailboxScanner, ICategoryTarget, IDisposable
 {
     private const string LongTermEntryIdProperty = "http://schemas.microsoft.com/mapi/proptag/0x66700102";
     private const string MessageIdProperty = "http://schemas.microsoft.com/mapi/proptag/0x1035001F";
     private const string SmtpAddressProperty = "http://schemas.microsoft.com/mapi/proptag/0x39FE001F";
+    private const string TransportHeadersProperty = "http://schemas.microsoft.com/mapi/proptag/0x007D001F";
     private const int MapiNotFound = unchecked((int)0x8004010F);
+
+    /// <summary>COM errors that mean Outlook went away (closed, restarted or hung).</summary>
+    private static readonly HashSet<int> Disconnected =
+    [
+        unchecked((int)0x80010108), // RPC_E_DISCONNECTED
+        unchecked((int)0x800706BA), // RPC_S_SERVER_UNAVAILABLE
+        unchecked((int)0x800706BE), // RPC_S_CALL_FAILED
+        unchecked((int)0x800401FD), // CO_E_OBJNOTCONNECTED
+        unchecked((int)0x80010001), // RPC_E_CALL_REJECTED (busy)
+    ];
 
     private readonly StaDispatcher _sta = new();
     private OL.Application? _app;
 
-    public Task<IReadOnlyList<StoreInfo>> ListStoresAsync() => _sta.InvokeAsync<IReadOnlyList<StoreInfo>>(() =>
+    public Task<IReadOnlyList<StoreInfo>> ListStoresAsync() => Invoke<IReadOnlyList<StoreInfo>>(() =>
     {
         var session = App().Session;
         var stores = session.Stores;
@@ -54,67 +67,76 @@ public sealed class OutlookMailbox : IMessageSource, IDisposable
 
     /// <summary>The newest mail items in the store's Inbox, metadata only.</summary>
     public Task<IReadOnlyList<DiscoveredMessage>> ListRecentInboxAsync(string storeId, int count) =>
-        _sta.InvokeAsync<IReadOnlyList<DiscoveredMessage>>(() =>
+        Invoke(() => ListInbox(storeId, DateTimeOffset.MinValue, count));
+
+    public Task<IReadOnlyList<DiscoveredMessage>> ListInboxSinceAsync(string storeId, DateTimeOffset since, int max, CancellationToken cancellationToken) =>
+        Invoke(() => ListInbox(storeId, since, max));
+
+    private IReadOnlyList<DiscoveredMessage> ListInbox(string storeId, DateTimeOffset since, int max)
+    {
+        var session = App().Session;
+        var store = session.GetStoreFromID(storeId);
+        var inbox = (OL.Folder)store.GetDefaultFolder(OL.OlDefaultFolders.olFolderInbox);
+        var table = inbox.GetTable("", OL.OlTableContents.olUserItems);
+        try
         {
-            var session = App().Session;
-            var store = session.GetStoreFromID(storeId);
-            var inbox = (OL.Folder)store.GetDefaultFolder(OL.OlDefaultFolders.olFolderInbox);
-            var table = inbox.GetTable("", OL.OlTableContents.olUserItems);
-            try
-            {
-                var columns = table.Columns;
-                columns.RemoveAll();
-                columns.Add(LongTermEntryIdProperty); // 1
-                columns.Add("ReceivedTime");          // 2
-                columns.Add("MessageClass");          // 3
-                columns.Add(MessageIdProperty);       // 4
-                table.Sort("[ReceivedTime]", Descending: true);
+            var columns = table.Columns;
+            columns.RemoveAll();
+            columns.Add(LongTermEntryIdProperty); // 1
+            columns.Add("ReceivedTime");          // 2
+            columns.Add("MessageClass");          // 3
+            columns.Add(MessageIdProperty);       // 4
+            table.Sort("[ReceivedTime]", Descending: true);
 
-                var mailbox = store.DisplayName;
-                var folderPath = inbox.FolderPath;
-                var result = new List<DiscoveredMessage>();
-                while (result.Count < count && !table.EndOfTable)
+            var mailbox = store.DisplayName;
+            var folderPath = inbox.FolderPath;
+            var result = new List<DiscoveredMessage>();
+            while (result.Count < max && !table.EndOfTable)
+            {
+                var row = table.GetNextRow();
+                try
                 {
-                    var row = table.GetNextRow();
-                    try
+                    var values = (object[])row.GetValues();
+                    if (values[1] is not DateTime receivedLocal)
                     {
-                        var values = (object[])row.GetValues();
-                        if (values[2] is not string messageClass ||
-                            !messageClass.StartsWith("IPM.Note", StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
+                        continue;
+                    }
 
-                        var entryId = row.BinaryToString(1);
-                        var received = new DateTimeOffset(DateTime.SpecifyKind((DateTime)values[1], DateTimeKind.Local));
-                        result.Add(new DiscoveredMessage(
-                            new MessageReference(storeId, entryId), mailbox, folderPath, values[3] as string, received));
-                    }
-                    finally
+                    var received = new DateTimeOffset(DateTime.SpecifyKind(receivedLocal, DateTimeKind.Local));
+                    if (received < since)
                     {
-                        Marshal.ReleaseComObject(row);
+                        break; // sorted newest first
                     }
+
+                    if (values[2] is not string messageClass ||
+                        !messageClass.StartsWith("IPM.Note", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    result.Add(new DiscoveredMessage(
+                        new MessageReference(storeId, row.BinaryToString(1)), mailbox, folderPath, values[3] as string, received));
                 }
+                finally
+                {
+                    Marshal.ReleaseComObject(row);
+                }
+            }
 
-                return result;
-            }
-            finally
-            {
-                Marshal.ReleaseComObject(table);
-                Marshal.ReleaseComObject(inbox);
-                Marshal.ReleaseComObject(store);
-            }
-        });
+            return result;
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(table);
+            Marshal.ReleaseComObject(inbox);
+            Marshal.ReleaseComObject(store);
+        }
+    }
 
     public Task<MessageReadResult> ReadAsync(MessageReference reference, string mailbox, CancellationToken cancellationToken) =>
-        _sta.InvokeAsync(() =>
+        Invoke(() =>
         {
-            object item;
-            try
-            {
-                item = App().Session.GetItemFromID(reference.EntryId, reference.StoreId);
-            }
-            catch (COMException ex) when (ex.HResult == MapiNotFound)
+            if (GetItem(reference) is not { } item)
             {
                 return MessageReadResult.Gone();
             }
@@ -135,7 +157,80 @@ public sealed class OutlookMailbox : IMessageSource, IDisposable
                 var received = new DateTimeOffset(DateTime.SpecifyKind(mail.ReceivedTime, DateTimeKind.Local));
                 return MessageReadResult.Found(new MessageForAssessment(
                     mailbox, mail.SenderName ?? "", SenderAddress(mail), mail.To ?? "", mail.CC ?? "",
-                    received, mail.Subject ?? "", body, RoleOf(mail, mailbox)));
+                    received, mail.Subject ?? "", body, RoleOf(mail, mailbox), StringProperty(mail, TransportHeadersProperty)));
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(item);
+            }
+        });
+
+    /// <summary>
+    /// Changes only this application's own categories on an Exchange message, after
+    /// checking that it is still the message that was assessed. The current categories
+    /// are re-read just before saving, and the read state is verified afterwards.
+    /// </summary>
+    public Task<CategoryWriteResult> ChangeAsync(MessageReference reference, CategoryChange change, CancellationToken cancellationToken) =>
+        Invoke(() =>
+        {
+            if (GetItem(reference) is not { } item)
+            {
+                return CategoryWriteResult.Of(CategoryWriteStatus.Gone, "viestiä ei löytynyt");
+            }
+
+            try
+            {
+                if (item is not OL.MailItem mail)
+                {
+                    return CategoryWriteResult.Of(CategoryWriteStatus.Mismatch, "ei sähköpostiviesti");
+                }
+
+                if (!IsExchangeMailbox(mail))
+                {
+                    // IMAP (Gmail) categories stay local to Outlook and do not sync; shown in the app only.
+                    return CategoryWriteResult.Of(CategoryWriteStatus.NotSupported, "luokat vain M365-laatikoihin");
+                }
+
+                var messageId = StringProperty(mail, MessageIdProperty);
+                if (change.ExpectedMessageId is not null && !string.Equals(messageId, change.ExpectedMessageId, StringComparison.Ordinal))
+                {
+                    return CategoryWriteResult.Of(CategoryWriteStatus.Mismatch, "Message-ID ei täsmää");
+                }
+
+                if (!string.Equals(MessageIdentity.ContentHash(mail.Subject, mail.Body), change.ExpectedContentHash, StringComparison.Ordinal))
+                {
+                    return CategoryWriteResult.Of(CategoryWriteStatus.Mismatch, "sisältö on muuttunut arvioinnin jälkeen");
+                }
+
+                var separator = ListSeparator();
+                var before = mail.Categories;
+                var unreadBefore = mail.UnRead;
+                var (after, changed, added) = AiCategories.Apply(before, separator, change.Add, change.Remove);
+                if (!changed)
+                {
+                    return new CategoryWriteResult(CategoryWriteStatus.Unchanged, false, before, before, null);
+                }
+
+                try
+                {
+                    mail.Categories = after;
+                    mail.Save();
+                }
+                catch (COMException ex) when (!Disconnected.Contains(ex.HResult))
+                {
+                    return CategoryWriteResult.Of(CategoryWriteStatus.Failed, $"tallennus epäonnistui (0x{ex.HResult:X8}), esim. vain luku -kansio");
+                }
+
+                string? warning = null;
+                if (unreadBefore && !mail.UnRead)
+                {
+                    // Never observed in phase 1, but the read state must not change.
+                    mail.UnRead = true;
+                    mail.Save();
+                    warning = "lukutila muuttui ja palautettiin";
+                }
+
+                return new CategoryWriteResult(CategoryWriteStatus.Written, added, before, mail.Categories, warning);
             }
             finally
             {
@@ -148,14 +243,9 @@ public sealed class OutlookMailbox : IMessageSource, IDisposable
     /// user opens it. Returns false if the message no longer exists.
     /// </summary>
     public Task<bool> DisplayAsync(MessageReference reference) =>
-        _sta.InvokeAsync(() =>
+        Invoke(() =>
         {
-            object item;
-            try
-            {
-                item = App().Session.GetItemFromID(reference.EntryId, reference.StoreId);
-            }
-            catch (COMException ex) when (ex.HResult == MapiNotFound)
+            if (GetItem(reference) is not { } item)
             {
                 return false;
             }
@@ -175,6 +265,101 @@ public sealed class OutlookMailbox : IMessageSource, IDisposable
                 Marshal.ReleaseComObject(item);
             }
         });
+
+    public void Dispose()
+    {
+        if (_app is not null)
+        {
+            var app = _app;
+            _app = null;
+            _sta.InvokeAsync(() => Marshal.ReleaseComObject(app)).Wait(TimeSpan.FromSeconds(10));
+        }
+
+        _sta.Dispose();
+    }
+
+    /// <summary>
+    /// Runs on the STA thread. A lost connection releases the stale Outlook object so
+    /// the next call attaches to the running Outlook again (never starts it).
+    /// </summary>
+    private Task<T> Invoke<T>(Func<T> action) => _sta.InvokeAsync(() =>
+    {
+        try
+        {
+            return action();
+        }
+        catch (Exception ex) when (ex is InvalidComObjectException || ex is COMException com && Disconnected.Contains(com.HResult))
+        {
+            Reset();
+            throw new OutlookUnavailableException("Yhteys Outlookiin katkesi (Outlook suljettiin, käynnistyi uudelleen tai ei vastaa).");
+        }
+    });
+
+    private void Reset()
+    {
+        if (_app is not null)
+        {
+            try
+            {
+                Marshal.ReleaseComObject(_app);
+            }
+            catch (InvalidComObjectException)
+            {
+            }
+
+            _app = null;
+        }
+    }
+
+    private object? GetItem(MessageReference reference)
+    {
+        try
+        {
+            return App().Session.GetItemFromID(reference.EntryId, reference.StoreId);
+        }
+        catch (COMException ex) when (ex.HResult == MapiNotFound)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsExchangeMailbox(OL.MailItem mail)
+    {
+        var folder = (OL.Folder)mail.Parent;
+        try
+        {
+            var store = folder.Store;
+            try
+            {
+                return store.ExchangeStoreType is OL.OlExchangeStoreType.olPrimaryExchangeMailbox
+                    or OL.OlExchangeStoreType.olAdditionalExchangeMailbox;
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(store);
+            }
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(folder);
+        }
+    }
+
+    /// <summary>Outlook separates categories with the Windows list separator of the user's regional settings.</summary>
+    private static string ListSeparator() =>
+        Registry.GetValue(@"HKEY_CURRENT_USER\Control Panel\International", "sList", null) is string s && s.Length > 0 ? s : ",";
+
+    private static string StringProperty(OL.MailItem mail, string property)
+    {
+        try
+        {
+            return mail.PropertyAccessor.GetProperty(property) as string ?? "";
+        }
+        catch (COMException ex) when (!Disconnected.Contains(ex.HResult))
+        {
+            return ""; // property not present
+        }
+    }
 
     /// <summary>
     /// Whether the mailbox (its display name is the SMTP address for these stores)
@@ -217,7 +402,7 @@ public sealed class OutlookMailbox : IMessageSource, IDisposable
 
             return inCopy ? RecipientRole.Copy : RecipientRole.NotNamed;
         }
-        catch (COMException)
+        catch (COMException ex) when (!Disconnected.Contains(ex.HResult))
         {
             return RecipientRole.Unknown;
         }
@@ -233,22 +418,10 @@ public sealed class OutlookMailbox : IMessageSource, IDisposable
         {
             return recipient.PropertyAccessor.GetProperty(SmtpAddressProperty) as string ?? recipient.Address ?? "";
         }
-        catch (COMException)
+        catch (COMException ex) when (!Disconnected.Contains(ex.HResult))
         {
             return recipient.Address ?? "";
         }
-    }
-
-    public void Dispose()
-    {
-        if (_app is not null)
-        {
-            var app = _app;
-            _app = null;
-            _sta.InvokeAsync(() => Marshal.ReleaseComObject(app)).Wait(TimeSpan.FromSeconds(10));
-        }
-
-        _sta.Dispose();
     }
 
     private static string SenderAddress(OL.MailItem mail)
@@ -265,7 +438,7 @@ public sealed class OutlookMailbox : IMessageSource, IDisposable
             var user = sender?.GetExchangeUser();
             return user?.PrimarySmtpAddress ?? mail.SenderEmailAddress ?? "";
         }
-        catch (COMException)
+        catch (COMException ex) when (!Disconnected.Contains(ex.HResult))
         {
             return mail.SenderEmailAddress ?? "";
         }

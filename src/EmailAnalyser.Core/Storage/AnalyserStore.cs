@@ -27,7 +27,25 @@ public sealed record ReviewItem(
     bool Truncated,
     string? Model,
     string? PromptVersion,
-    UserLabel? Label);
+    UserLabel? Label,
+    string? CategoryOwned = null,
+    string? CategoryStatus = null);
+
+/// <summary>This application's category state for one message.</summary>
+public sealed record CategoryState(string? Desired, string? Owned, string Status, int Attempts);
+
+/// <summary>A message that may need its Outlook category changed.</summary>
+public sealed record CategoryCandidate(
+    long MessageId,
+    MessageReference Reference,
+    string? Subject,
+    string? InternetMessageId,
+    string? ContentHash,
+    Assessment? Assessment,
+    UserLabel? Label,
+    CategoryState? State);
+
+public sealed record RetentionResult(int Deleted, int Redacted);
 
 public static class LabelSplit
 {
@@ -68,7 +86,7 @@ public sealed record AssessmentReport(
 /// </summary>
 public sealed class AnalyserStore : IDisposable
 {
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
     public const int MaxMessageAttempts = 3;
     private readonly SqliteConnection _db;
 
@@ -99,6 +117,10 @@ public sealed class AnalyserStore : IDisposable
             Exec(connection, "SELECT count(*) FROM sqlite_master");
             Exec(connection, "PRAGMA journal_mode = WAL");
             Exec(connection, "PRAGMA foreign_keys = ON");
+            // The view and the monitor use separate connections to the same file.
+            Exec(connection, "PRAGMA busy_timeout = 10000");
+            // Deleted rows (retention) are overwritten instead of left in free pages.
+            Exec(connection, "PRAGMA secure_delete = ON");
             var store = new AnalyserStore(connection);
             store.Migrate();
             return store;
@@ -278,11 +300,13 @@ public sealed class AnalyserStore : IDisposable
                    m.status, m.last_error,
                    a.id, a.valid, a.summary, a.rationale, a.topic, a.action, a.urgency, a.deadline, a.needs_review,
                    a.review_reasons, a.truncated, a.model, a.prompt_version,
-                   l.action, l.urgency, l.topic, l.deadline, l.agrees_with_ai, l.split, l.blind, l.labeled_utc
+                   l.action, l.urgency, l.topic, l.deadline, l.agrees_with_ai, l.split, l.blind, l.labeled_utc,
+                   c.owned, c.status
             FROM messages m
             LEFT JOIN (SELECT message_id, max(id) AS id FROM assessments GROUP BY message_id) la ON la.message_id = m.id
             LEFT JOIN assessments a ON a.id = la.id
             LEFT JOIN labels l ON l.message_id = m.id
+            LEFT JOIN category_state c ON c.message_id = m.id
             ORDER BY m.received_utc DESC
             """);
         using var r = cmd.ExecuteReader();
@@ -309,7 +333,8 @@ public sealed class AnalyserStore : IDisposable
                 r.IsDBNull(4) ? null : r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5), r.IsDBNull(6) ? null : r.GetString(6),
                 ParseUtc(r.GetString(7)), r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9),
                 r.IsDBNull(10) ? null : r.GetInt64(10), assessment, !r.IsDBNull(20) && r.GetInt32(20) == 1,
-                r.IsDBNull(21) ? null : r.GetString(21), r.IsDBNull(22) ? null : r.GetString(22), label));
+                r.IsDBNull(21) ? null : r.GetString(21), r.IsDBNull(22) ? null : r.GetString(22), label,
+                r.IsDBNull(31) ? null : r.GetString(31), r.IsDBNull(32) ? null : r.GetString(32)));
         }
 
         return result;
@@ -383,8 +408,215 @@ public sealed class AnalyserStore : IDisposable
     public IReadOnlyDictionary<string, int> ProblemsByMailbox() =>
         CountBy("SELECT mailbox, count(*) FROM messages WHERE status IN ('gone', 'unreadable', 'invalid', 'failed') GROUP BY mailbox");
 
-    public static string ContentHash(MessageForAssessment message) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(message.Subject + "\n" + message.Body)))[..32];
+    public static string ContentHash(MessageForAssessment message) => MessageIdentity.ContentHash(message.Subject, message.Body);
+
+    // --- monitoring ----------------------------------------------------------------------------
+
+    /// <summary>Queued message count and when the longest-waiting one was discovered.</summary>
+    public (int Count, DateTimeOffset? OldestDiscovered) QueueInfo()
+    {
+        using var cmd = Command("SELECT count(*), min(discovered_utc) FROM messages WHERE status = 'queued'");
+        using var r = cmd.ExecuteReader();
+        r.Read();
+        return (r.GetInt32(0), r.IsDBNull(1) ? null : ParseUtc(r.GetString(1)));
+    }
+
+    /// <summary>Newest ReceivedTime seen in the store's Inbox; the next scan starts from it.</summary>
+    public DateTimeOffset? GetScanMark(string storeId)
+    {
+        using var cmd = Command("SELECT newest_received_utc FROM store_state WHERE store_id = $store");
+        cmd.Parameters.AddWithValue("$store", storeId);
+        return cmd.ExecuteScalar() is string value ? ParseUtc(value) : null;
+    }
+
+    public void SetScanMark(string storeId, DateTimeOffset newestReceived, DateTimeOffset now)
+    {
+        using var cmd = Command("""
+            INSERT INTO store_state (store_id, newest_received_utc, last_scan_utc) VALUES ($store, $newest, $now)
+            ON CONFLICT (store_id) DO UPDATE SET
+                newest_received_utc = max(newest_received_utc, excluded.newest_received_utc), last_scan_utc = excluded.last_scan_utc
+            """);
+        cmd.Parameters.AddWithValue("$store", storeId);
+        cmd.Parameters.AddWithValue("$newest", Utc(newestReceived));
+        cmd.Parameters.AddWithValue("$now", Utc(now));
+        cmd.ExecuteNonQuery();
+    }
+
+    public string? GetAppState(string key)
+    {
+        using var cmd = Command("SELECT value FROM app_state WHERE key = $key");
+        cmd.Parameters.AddWithValue("$key", key);
+        return cmd.ExecuteScalar() as string;
+    }
+
+    public void SetAppState(string key, string value)
+    {
+        using var cmd = Command("INSERT INTO app_state (key, value) VALUES ($key, $value) ON CONFLICT (key) DO UPDATE SET value = excluded.value");
+        cmd.Parameters.AddWithValue("$key", key);
+        cmd.Parameters.AddWithValue("$value", value);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Deletes messages received before <paramref name="cutoff"/> with their assessments.
+    /// Labelled messages and messages carrying a category this application added are
+    /// kept for measurement and rollback, but their subject, sender, summary and
+    /// rationale are removed.
+    /// </summary>
+    public RetentionResult ApplyRetention(DateTimeOffset cutoff)
+    {
+        const string keep = """
+            (id IN (SELECT message_id FROM labels) OR id IN (SELECT message_id FROM category_state WHERE owned IS NOT NULL))
+            """;
+        using var tx = _db.BeginTransaction();
+        int deleted, redacted;
+        using (var cmd = Command($"DELETE FROM messages WHERE received_utc < $cutoff AND NOT {keep}", tx))
+        {
+            cmd.Parameters.AddWithValue("$cutoff", Utc(cutoff));
+            deleted = cmd.ExecuteNonQuery();
+        }
+
+        using (var cmd = Command($"""
+            UPDATE messages SET subject = NULL, sender_name = NULL, sender_address = NULL
+            WHERE received_utc < $cutoff AND (subject IS NOT NULL OR sender_name IS NOT NULL OR sender_address IS NOT NULL) AND {keep}
+            """, tx))
+        {
+            cmd.Parameters.AddWithValue("$cutoff", Utc(cutoff));
+            redacted = cmd.ExecuteNonQuery();
+        }
+
+        using (var cmd = Command("""
+            UPDATE assessments SET summary = '', rationale = ''
+            WHERE (summary <> '' OR rationale <> '') AND message_id IN (SELECT id FROM messages WHERE received_utc < $cutoff)
+            """, tx))
+        {
+            cmd.Parameters.AddWithValue("$cutoff", Utc(cutoff));
+            cmd.ExecuteNonQuery();
+        }
+
+        tx.Commit();
+        return new RetentionResult(deleted, redacted);
+    }
+
+    // --- categories ----------------------------------------------------------------------------
+
+    /// <summary>Assessed messages with their latest valid assessment, label and category state.</summary>
+    public IReadOnlyList<CategoryCandidate> GetCategoryCandidates() => ReadCategoryCandidates("""
+        WHERE m.status = 'assessed' AND (a.id IS NOT NULL OR l.message_id IS NOT NULL)
+        """);
+
+    /// <summary>Messages carrying a category this application added.</summary>
+    public IReadOnlyList<CategoryCandidate> GetOwnedCategories() => ReadCategoryCandidates("WHERE c.owned IS NOT NULL");
+
+    private List<CategoryCandidate> ReadCategoryCandidates(string where)
+    {
+        using var cmd = Command($"""
+            SELECT m.id, m.store_id, m.entry_id, m.subject, m.internet_message_id, m.content_hash,
+                   a.action, a.review_reasons, l.action, c.desired, c.owned, c.status, c.attempts
+            FROM messages m
+            LEFT JOIN (SELECT message_id, max(id) AS id FROM assessments GROUP BY message_id) la ON la.message_id = m.id
+            LEFT JOIN assessments a ON a.id = la.id AND a.valid = 1
+            LEFT JOIN labels l ON l.message_id = m.id
+            LEFT JOIN category_state c ON c.message_id = m.id
+            {where}
+            ORDER BY m.received_utc DESC
+            """);
+        using var r = cmd.ExecuteReader();
+        var result = new List<CategoryCandidate>();
+        while (r.Read())
+        {
+            var assessment = r.IsDBNull(6) ? null : new Assessment(
+                "", "", "muu", r.GetString(6), "ei_maaraaikaa", null, false,
+                JsonSerializer.Deserialize<string[]>(r.GetString(7)) ?? []);
+            var label = r.IsDBNull(8) ? null : new UserLabel(r.GetString(8), "", "", null);
+            var state = r.IsDBNull(11) ? null : new CategoryState(
+                r.IsDBNull(9) ? null : r.GetString(9), r.IsDBNull(10) ? null : r.GetString(10), r.GetString(11), r.GetInt32(12));
+            result.Add(new CategoryCandidate(
+                r.GetInt64(0), new MessageReference(r.GetString(1), r.GetString(2)),
+                r.IsDBNull(3) ? null : r.GetString(3), r.IsDBNull(4) ? null : r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5),
+                assessment, label, state));
+        }
+
+        return result;
+    }
+
+    /// <summary>Records the outcome of a category change and appends it to the history.</summary>
+    public void SaveCategoryResult(long messageId, string? desired, string? owned, CategoryWriteResult result, string kind, DateTimeOffset now)
+    {
+        using var tx = _db.BeginTransaction();
+        using (var cmd = Command("""
+            INSERT INTO category_state (message_id, desired, owned, status, attempts, error, updated_utc)
+            VALUES ($id, $desired, $owned, $status, 1, $error, $now)
+            ON CONFLICT (message_id) DO UPDATE SET
+                attempts = CASE WHEN category_state.desired IS excluded.desired AND category_state.status = excluded.status
+                                THEN category_state.attempts + 1 ELSE 1 END,
+                desired = excluded.desired, owned = excluded.owned, status = excluded.status,
+                error = excluded.error, updated_utc = excluded.updated_utc
+            """, tx))
+        {
+            cmd.Parameters.AddWithValue("$id", messageId);
+            cmd.Parameters.AddWithValue("$desired", (object?)desired ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$owned", (object?)owned ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$status", result.Status.ToString());
+            cmd.Parameters.AddWithValue("$error", (object?)result.Error ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$now", Utc(now));
+            cmd.ExecuteNonQuery();
+        }
+
+        using (var cmd = Command("""
+            INSERT INTO category_log (message_id, created_utc, kind, desired, status, added, categories_before, categories_after, error)
+            VALUES ($id, $now, $kind, $desired, $status, $added, $before, $after, $error)
+            """, tx))
+        {
+            cmd.Parameters.AddWithValue("$id", messageId);
+            cmd.Parameters.AddWithValue("$now", Utc(now));
+            cmd.Parameters.AddWithValue("$kind", kind);
+            cmd.Parameters.AddWithValue("$desired", (object?)desired ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$status", result.Status.ToString());
+            cmd.Parameters.AddWithValue("$added", result.Added ? 1 : 0);
+            cmd.Parameters.AddWithValue("$before", (object?)result.Before ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$after", (object?)result.After ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$error", (object?)result.Error ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        }
+
+        tx.Commit();
+    }
+
+    /// <summary>Category state counts and how many categories this application currently owns.</summary>
+    public (IReadOnlyDictionary<string, int> ByStatus, int Owned, int LogEntries) CategorySummary()
+    {
+        using var owned = Command("SELECT count(*) FROM category_state WHERE owned IS NOT NULL");
+        using var log = Command("SELECT count(*) FROM category_log");
+        return (CountBy("SELECT status, count(*) FROM category_state GROUP BY status"),
+            Convert.ToInt32(owned.ExecuteScalar(), CultureInfo.InvariantCulture),
+            Convert.ToInt32(log.ExecuteScalar(), CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>The latest category change of the user-chosen test message (exact subject); for development checks.</summary>
+    public (string Kind, string Status, string? Before, string? After, string? Error)? LastCategoryChangeForSubject(string subject)
+    {
+        using var cmd = Command("""
+            SELECT g.kind, g.status, g.categories_before, g.categories_after, g.error
+            FROM category_log g JOIN messages m ON m.id = g.message_id
+            WHERE m.subject = $subject ORDER BY g.id DESC LIMIT 1
+            """);
+        cmd.Parameters.AddWithValue("$subject", subject);
+        using var r = cmd.ExecuteReader();
+        return r.Read()
+            ? (r.GetString(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2), r.IsDBNull(3) ? null : r.GetString(3), r.IsDBNull(4) ? null : r.GetString(4))
+            : null;
+    }
+
+    /// <summary>Whether the user-chosen test message is in the database and assessed (by exact subject).</summary>
+    public (int Found, int Assessed) FindBySubject(string subject)
+    {
+        using var cmd = Command("SELECT count(*), coalesce(sum(status = 'assessed'), 0) FROM messages WHERE subject = $subject");
+        cmd.Parameters.AddWithValue("$subject", subject);
+        using var r = cmd.ExecuteReader();
+        r.Read();
+        return (r.GetInt32(0), r.GetInt32(1));
+    }
 
     // --- batches -------------------------------------------------------------------------------
 
@@ -649,6 +881,47 @@ public sealed class AnalyserStore : IDisposable
                     labeled_utc TEXT NOT NULL
                 );
                 PRAGMA user_version = 2;
+                """, tx);
+            cmd.ExecuteNonQuery();
+            tx.Commit();
+        }
+
+        if (version < 3)
+        {
+            using var tx = _db.BeginTransaction();
+            using var cmd = Command("""
+                CREATE TABLE store_state (
+                    store_id TEXT PRIMARY KEY,
+                    newest_received_utc TEXT NOT NULL,
+                    last_scan_utc TEXT NOT NULL
+                );
+                CREATE TABLE app_state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+                CREATE TABLE category_state (
+                    message_id INTEGER PRIMARY KEY REFERENCES messages (id) ON DELETE CASCADE,
+                    desired TEXT,
+                    owned TEXT,
+                    status TEXT NOT NULL,
+                    attempts INTEGER NOT NULL,
+                    error TEXT,
+                    updated_utc TEXT NOT NULL
+                );
+                CREATE TABLE category_log (
+                    id INTEGER PRIMARY KEY,
+                    message_id INTEGER NOT NULL REFERENCES messages (id) ON DELETE CASCADE,
+                    created_utc TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    desired TEXT,
+                    status TEXT NOT NULL,
+                    added INTEGER NOT NULL,
+                    categories_before TEXT,
+                    categories_after TEXT,
+                    error TEXT
+                );
+                CREATE INDEX ix_category_log_message ON category_log (message_id);
+                PRAGMA user_version = 3;
                 """, tx);
             cmd.ExecuteNonQuery();
             tx.Commit();

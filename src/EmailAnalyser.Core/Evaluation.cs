@@ -29,6 +29,8 @@ public sealed class EvalCase
     [JsonPropertyName("subject")] public string Subject { get; init; } = "";
     [JsonPropertyName("body")] public string Body { get; init; } = "";
     [JsonPropertyName("fillerChars")] public int FillerChars { get; init; }
+    /// <summary>Transport headers, e.g. a failed Authentication-Results line for spoofing cases.</summary>
+    [JsonPropertyName("headers")] public string Headers { get; init; } = "";
     [JsonPropertyName("expect")] public EvalExpectation Expect { get; init; } = new();
     [JsonPropertyName("note")] public string? Note { get; init; }
 
@@ -52,7 +54,7 @@ public sealed class EvalCase
             "ei_nimetty" => RecipientRole.NotNamed,
             _ => RecipientRole.Direct,
         };
-        return new MessageForAssessment(Mailbox, From, FromAddress, To, Cc, Received, Subject, body, role);
+        return new MessageForAssessment(Mailbox, From, FromAddress, To, Cc, Received, Subject, body, role, Headers);
     }
 }
 

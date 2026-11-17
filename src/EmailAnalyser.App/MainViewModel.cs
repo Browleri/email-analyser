@@ -18,7 +18,9 @@ public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode)
     public DateTimeOffset ReceivedSort => Item.Received;
     public string Sender => SafeText.Clean(Item.SenderName, keepNewlines: false);
     public string SenderAddress => SafeText.Clean(Item.SenderAddress, keepNewlines: false);
-    public string Subject => Item.Subject is null ? "(ei vielä luettu)" : SafeText.Clean(Item.Subject, keepNewlines: false);
+    public string Subject => Item.Subject is not null
+        ? SafeText.Clean(Item.Subject, keepNewlines: false)
+        : Item.Assessment is not null || Item.Label is not null ? "(tunnistetiedot poistettu säilytysajan päätyttyä)" : "(ei vielä luettu)";
     public string Status => Display.Text(Item.Status);
     public bool IsLabeled => Item.Label is not null;
     public string LabeledMark => IsLabeled ? "✓" : "";
@@ -36,6 +38,10 @@ public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode)
         ? ""
         : "Tarkistettava: " + string.Join(", ", Item.Assessment.ReviewReasons.Select(Display.Text));
     public bool InjectionSuspected => Item.Assessment?.ReviewReasons.Contains(InjectionHeuristics.ReviewReason) == true;
+    public bool SenderSuspected => Item.Assessment?.ReviewReasons.Contains(SenderAuthentication.ReviewReason) == true;
+    public string Category => Item.CategoryStatus is null
+        ? ""
+        : $"Outlook-luokka: {Item.CategoryOwned ?? "ei sovelluksen luokkaa"} ({Display.Text("luokka_" + Item.CategoryStatus)})";
     public string ModelInfo => ShowAi ? $"{Item.Model} · {Item.PromptVersion}{(Item.Truncated ? " · sisältö katkaistu" : "")}" : "";
 
     /// <summary>The user says it needs attention but the AI did not flag it.</summary>
@@ -64,7 +70,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private const string AllMailboxes = "Kaikki laatikot";
 
     private readonly AnalyserStore _store;
-    private OutlookMailbox? _outlook;
+    private readonly OutlookMailbox _outlook = new();
+    private readonly MonitorHost? _monitor;
+    private string _statusMonitor = "Seuranta käynnistyy…";
+    private bool _monitorAttention;
+    private bool _monitorPaused;
+    private int _assessmentsAtReload;
+    private int _assessmentsNow;
     private ItemViewModel? _selected;
     private string _filter = "kaikki";
     private string _mailbox = AllMailboxes;
@@ -84,7 +96,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         AcceptAiCommand = new RelayCommand(AcceptAi, () => Selected?.ShowAi == true);
         DeleteLabelCommand = new RelayCommand(DeleteLabel, () => Selected?.IsLabeled == true);
         OpenCommand = new RelayCommand(OpenInOutlook, () => Selected is not null);
+        ProcessNowCommand = new RelayCommand(() => _monitor?.Monitor.ProcessNow(), () => _monitor is not null && !MonitorPaused);
+        TogglePauseCommand = new RelayCommand(TogglePause, () => _monitor is not null);
         Refresh();
+
+        var settings = AppSettings.Load(AppPaths.Settings);
+        if (settings.Stores.Count == 0)
+        {
+            StatusMonitor = "Seuranta ei ole käytössä: valitse laatikot komennolla email-analyser init --stores …";
+        }
+        else
+        {
+            _monitor = new MonitorHost(_outlook, settings);
+            _monitor.Monitor.StatusChanged += status => Application.Current?.Dispatcher.BeginInvoke(() => OnMonitorStatus(status));
+            _monitor.Start();
+        }
     }
 
     public ObservableCollection<ItemViewModel> Items { get; } = [];
@@ -100,6 +126,31 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public RelayCommand AcceptAiCommand { get; }
     public RelayCommand DeleteLabelCommand { get; }
     public RelayCommand OpenCommand { get; }
+    public RelayCommand ProcessNowCommand { get; }
+    public RelayCommand TogglePauseCommand { get; }
+
+    public string StatusMonitor { get => _statusMonitor; private set => Set(ref _statusMonitor, value); }
+
+    /// <summary>A problem or a deferral longer than an hour: shown highlighted.</summary>
+    public bool MonitorAttention { get => _monitorAttention; private set => Set(ref _monitorAttention, value); }
+
+    public bool MonitorPaused
+    {
+        get => _monitorPaused;
+        private set
+        {
+            if (Set(ref _monitorPaused, value))
+            {
+                OnPropertyChanged(nameof(PauseButtonText));
+            }
+        }
+    }
+
+    public string PauseButtonText => MonitorPaused ? "Jatka seurantaa" : "Keskeytä seuranta";
+
+    public string NewResultsHint => _assessmentsNow > _assessmentsAtReload
+        ? $"Uusia arvioita {_assessmentsNow - _assessmentsAtReload}: päivitä (F5)"
+        : "";
 
     public string Filter
     {
@@ -161,14 +212,47 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        _outlook?.Dispose();
+        // Stops a running batch and waits for the model to be unloaded.
+        _monitor?.Dispose();
+        _outlook.Dispose();
         _store.Dispose();
+    }
+
+    private void TogglePause()
+    {
+        if (_monitor is null)
+        {
+            return;
+        }
+
+        if (_monitor.Monitor.Paused)
+        {
+            _monitor.Monitor.Resume();
+        }
+        else
+        {
+            _monitor.Monitor.Pause();
+        }
+
+        MonitorPaused = _monitor.Monitor.Paused;
+    }
+
+    private void OnMonitorStatus(MonitorStatus status)
+    {
+        StatusMonitor = MonitorText.Describe(status);
+        MonitorAttention = status.Problem is not null || status.DeferralWarning;
+        MonitorPaused = status.Paused;
+        _assessmentsNow = status.NewAssessments;
+        OnPropertyChanged(nameof(NewResultsHint));
     }
 
     private void Refresh() => Reload(Selected?.Id);
 
     private void Reload(long? selectId)
     {
+        // The list is refreshed only on request, so new results never disturb labelling.
+        _assessmentsAtReload = _assessmentsNow;
+        OnPropertyChanged(nameof(NewResultsHint));
         var items = _store.GetReviewItems();
         Items.Clear();
         foreach (var item in items)
@@ -274,7 +358,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            _outlook ??= new OutlookMailbox();
             if (!await _outlook.DisplayAsync(Selected.Item.Reference))
             {
                 MessageBox.Show("Viestiä ei enää löytynyt Outlookista.", "Avaa Outlookissa");
