@@ -284,7 +284,7 @@ Toteutus 17.11.2026:
 - **WPF-sovellus** `src/EmailAnalyser.App` (`EmailAnalyser.exe`):
   - kaikkien laatikoiden yhteinen lista ja suodattimet (vastattava ja tehtävä, kukin toimenpide, merkitsemättömät, huomiotta jääneet, ongelmat ja jono) sekä laatikkosuodatin,
   - viestin tiedot ja AI-arvio, avaus Outlookissa ja oma merkintä,
-  - tilarivi: jono, viimeisin erä, merkintöjen edistyminen ja laatikkokohtaiset ongelmat.
+  - tilarivi: jono, viimeisin erä, merkintöjen edistyminen ja laatikkokohtaiset ongelmat (muutettu käyttöliittymän arvioinnissa, ks. alla).
   - Pikanäppäimet: Ctrl+S tallentaa, Ctrl+Enter hyväksyy AI-arvion, Ctrl+O avaa viestin ja F5 päivittää. Tallennuksen jälkeen siirrytään seuraavaan merkitsemättömään viestiin.
 - **Sokkomerkintä:** valinnan ollessa päällä AI-arvio piilotetaan, kunnes viesti on merkitty. Näkyvä arvio voi ohjata merkintää, mikä vääristäisi laatumittausta. Jokaiseen merkintään tallennetaan, tehtiinkö se sokkona, ja vertailu raportoidaan erikseen sokkona ja arvio näkyvillä tehdyistä merkinnöistä.
 - **Säätö- ja arviointiosa:** jokainen merkitty viesti kuuluu pysyvästi joko säätöosaan (noin kolmannes) tai arviointiosaan. Jako tehdään viestin tunnisteen tiivisteestä. Kehotetta säädetään vain säätöosan tuloksilla.
@@ -294,6 +294,16 @@ Toteutus 17.11.2026:
 - **Tietokanta:** versio 2 lisää merkintätaulun. Merkintä on oma tietonsa, eikä uusi arvio korvaa sitä.
 
 Kaikki 192 viestiä arvioitiin uudelleen kehotteella `classify-v1-f982a679` 17.11.2026: kaikki arviot olivat kelvollisia, ja huomiota vaati 67 (vastattava 42, tehtävä 25). Lisäksi 2 viestiä oli tarkistettavia. Synteettisessä aineistossa (35 tapausta, joista 6 hyökkäyksiä) huomiota vaativat löytyivät 15/15, eikä turhia hälytyksiä ollut. Tämä ei ole riippumaton mittaus, koska kehotetta on säädetty samalla aineistolla.
+
+Käyttöliittymän arvioinnin korjaukset 17.11.2026 (vaiheen 5 jälkeen, ennen otoksen merkintää):
+
+- Huijaus- ja ohjailuvaroitus näkyvät AI-arvion ulkopuolella myös sokkotilassa (tietoturva-arvion F17). Listassa on varoitussarake.
+- Rivit korostetaan: vastattava ja tehtävä lihavoituna, tarkista keltaisella ja huijausepäily punaisella. Sokkotilassa korostus näkyy vain varoituksista.
+- Oletussuodatin on "Vaatii huomiota" (vastattava, tehtävä, tarkista ja varoitetut). Jokaisen suodattimen kohdalla näkyy osumien määrä valitussa laatikossa.
+- Sarakkeita karsittiin, jotta otsikolle jää tilaa: toimenpide ja kiireellisyys ovat yhdessä Arvio-sarakkeessa, jossa näkyy käsittelytila, jos ajantasaista arviota ei ole. Laatikko-sarake piilotetaan, kun yksi laatikko on valittuna. Erillinen Tila-sarake poistettiin.
+- Arvio lajittuu tärkeyden mukaan (toimenpide, sitten kiireellisyys) ja määräaika päivämääränä.
+- Yläpalkki rivittyy kapeassa ikkunassa. Seurannan painikkeet ovat alarivillä seurannan tilan vieressä.
+- Tilarivit eivät enää näytä ristiriitaisia lukuja: seurannan rivi näyttää ajantasaisen jonon ja erät, ja listan rivi kertoo, milloin lista on viimeksi päivitetty.
 
 Jäljellä: käyttäjä merkitsee otoksen näkymässä, minkä jälkeen löytymisosuus ja turhat hälytykset mitataan arviointiosasta. Jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
 

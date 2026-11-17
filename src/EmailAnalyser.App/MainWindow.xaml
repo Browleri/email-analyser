@@ -1,6 +1,7 @@
 ﻿<Window x:Class="EmailAnalyser.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:EmailAnalyser.App"
         Title="Sähköpostiavustaja" Height="820" Width="1450" MinWidth="900" MinHeight="500">
     <Window.InputBindings>
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
@@ -10,24 +11,28 @@
     </Window.InputBindings>
 
     <DockPanel>
-        <Border DockPanel.Dock="Top" Padding="8" Background="#F3F3F3" BorderBrush="#DDD" BorderThickness="0,0,0,1">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Näytä:" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <ComboBox Width="190" ItemsSource="{Binding FilterOptions}" DisplayMemberPath="Text" SelectedValuePath="Key"
-                          SelectedValue="{Binding Filter}" />
-                <TextBlock Text="Laatikko:" VerticalAlignment="Center" Margin="16,0,6,0" />
-                <ComboBox Width="240" ItemsSource="{Binding Mailboxes}" SelectedItem="{Binding Mailbox}" />
+        <!-- View controls only; monitoring controls are on the monitor line at the bottom. -->
+        <Border DockPanel.Dock="Top" Padding="8,6" Background="#F3F3F3" BorderBrush="#DDD" BorderThickness="0,0,0,1">
+            <WrapPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,2,16,2">
+                    <TextBlock Text="Näytä:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <ComboBox Width="220" ItemsSource="{Binding FilterOptions}" DisplayMemberPath="Text" SelectedValuePath="Key"
+                              SelectedValue="{Binding Filter}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,2,16,2">
+                    <TextBlock Text="Laatikko:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <ComboBox Width="240" ItemsSource="{Binding Mailboxes}" SelectedItem="{Binding Mailbox}" />
+                </StackPanel>
                 <CheckBox Content="Sokkomerkintä (piilota AI-arvio, kunnes merkitty)" IsChecked="{Binding BlindMode}"
-                          VerticalAlignment="Center" Margin="16,0,0,0" />
-                <Button Content="Päivitä (F5)" Command="{Binding RefreshCommand}" Margin="16,0,0,0" Padding="10,2" />
-                <TextBlock Text="{Binding NewResultsHint}" Foreground="#0B5CAD" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0" />
-                <Button Content="Käsittele nyt" Command="{Binding ProcessNowCommand}" Margin="24,0,0,0" Padding="10,2"
-                        ToolTip="Hae uudet viestit ja käsittele jono heti, jos näytönohjain on vapaa" />
-                <Button Content="{Binding PauseButtonText}" Command="{Binding TogglePauseCommand}" Margin="6,0,0,0" Padding="10,2"
-                        ToolTip="Keskeyttää haun ja eräajon; käynnissä oleva erä pysäytetään ja malli puretaan" />
-            </StackPanel>
+                          VerticalAlignment="Center" Margin="0,2,16,2" />
+                <StackPanel Orientation="Horizontal" Margin="0,2,0,2">
+                    <Button Content="Päivitä (F5)" Command="{Binding RefreshCommand}" Padding="10,2" />
+                    <TextBlock Text="{Binding NewResultsHint}" Foreground="#0B5CAD" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0" />
+                </StackPanel>
+            </WrapPanel>
         </Border>
 
+        <!-- Live monitoring state and its controls. -->
         <Border DockPanel.Dock="Bottom" Padding="8,3" BorderBrush="#DDD" BorderThickness="0,1,0,0">
             <Border.Style>
                 <Style TargetType="Border">
@@ -39,13 +44,18 @@
                     </Style.Triggers>
                 </Style>
             </Border.Style>
-            <TextBlock Text="{Binding StatusMonitor}" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusMonitor}" />
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="{Binding PauseButtonText}" Command="{Binding TogglePauseCommand}" Margin="6,0,0,0" Padding="10,1"
+                        ToolTip="Keskeyttää haun ja eräajon; käynnissä oleva erä pysäytetään ja malli puretaan" />
+                <Button DockPanel.Dock="Right" Content="Käsittele nyt" Command="{Binding ProcessNowCommand}" Margin="6,0,0,0" Padding="10,1"
+                        ToolTip="Hae uudet viestit ja käsittele jono heti, jos näytönohjain on vapaa" />
+                <TextBlock Text="{Binding StatusMonitor}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusMonitor}" />
+            </DockPanel>
         </Border>
 
+        <!-- The list as of the last refresh. -->
         <StatusBar DockPanel.Dock="Bottom">
-            <StatusBarItem Content="{Binding StatusQueue}" />
-            <Separator />
-            <StatusBarItem Content="{Binding StatusBatch}" />
+            <StatusBarItem Content="{Binding StatusList}" />
             <Separator />
             <StatusBarItem Content="{Binding StatusLabels}" />
             <Separator />
@@ -54,24 +64,49 @@
 
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" MinWidth="400" />
                 <ColumnDefinition Width="5" />
-                <ColumnDefinition Width="460" />
+                <ColumnDefinition Width="420" MinWidth="300" />
             </Grid.ColumnDefinitions>
 
             <DataGrid Grid.Column="0" ItemsSource="{Binding View}" SelectedItem="{Binding Selected}"
                       AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" HeadersVisibility="Column"
                       GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#EEE" CanUserAddRows="False">
+                <DataGrid.Resources>
+                    <local:BindingProxy x:Key="Proxy" Data="{Binding}" />
+                </DataGrid.Resources>
+                <DataGrid.RowStyle>
+                    <Style TargetType="DataGridRow">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Emphasis}" Value="attention">
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Emphasis}" Value="review">
+                                <Setter Property="Background" Value="#FFF6E0" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Emphasis}" Value="danger">
+                                <Setter Property="Background" Value="#FDE2E2" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.RowStyle>
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="✓" Binding="{Binding LabeledMark}" Width="26" />
-                    <DataGridTextColumn Header="Laatikko" Binding="{Binding Mailbox}" Width="150" />
-                    <DataGridTextColumn Header="Saapunut" Binding="{Binding Received}" SortMemberPath="ReceivedSort" Width="115" />
-                    <DataGridTextColumn Header="Lähettäjä" Binding="{Binding Sender}" Width="150" />
-                    <DataGridTextColumn Header="Otsikko" Binding="{Binding Subject}" Width="*" />
-                    <DataGridTextColumn Header="Toimenpide" Binding="{Binding AiAction}" Width="90" />
-                    <DataGridTextColumn Header="Kiireellisyys" Binding="{Binding AiUrgency}" Width="100" />
-                    <DataGridTextColumn Header="Määräaika" Binding="{Binding AiDeadline}" Width="80" />
-                    <DataGridTextColumn Header="Tila" Binding="{Binding Status}" Width="90" />
+                    <DataGridTemplateColumn Header="⚠" Width="26" SortMemberPath="HasWarning" CanUserResize="False">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding WarningMark}" ToolTip="{Binding WarningTip}" Foreground="#C9302C"
+                                           FontWeight="Bold" HorizontalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="✓" Binding="{Binding LabeledMark}" Width="24" CanUserResize="False" />
+                    <DataGridTextColumn Header="Laatikko" Binding="{Binding Mailbox}" Width="130"
+                                        Visibility="{Binding Data.ShowMailboxColumn, Source={StaticResource Proxy}, Converter={StaticResource BoolToVisibility}}" />
+                    <DataGridTextColumn Header="Saapunut" Binding="{Binding Received}" SortMemberPath="ReceivedSort" Width="110" />
+                    <DataGridTextColumn Header="Lähettäjä" Binding="{Binding Sender}" Width="140" />
+                    <DataGridTextColumn Header="Otsikko" Binding="{Binding Subject}" Width="*" MinWidth="120" />
+                    <DataGridTextColumn Header="Arvio" Binding="{Binding ListAssessment}" SortMemberPath="PrioritySort" Width="160" />
+                    <DataGridTextColumn Header="Määräaika" Binding="{Binding AiDeadline}" SortMemberPath="DeadlineSort" Width="80" />
                 </DataGrid.Columns>
             </DataGrid>
 
@@ -81,7 +116,7 @@
                 <StackPanel DataContext="{Binding Selected}">
                     <TextBlock Text="{Binding Subject}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <TextBlock Margin="0,4,0,0" TextWrapping="Wrap">
-                        <Run Text="{Binding Sender, Mode=OneWay}" /> <Run Text="&lt;" Foreground="Gray" /><Run Text="{Binding SenderAddress, Mode=OneWay}" Foreground="Gray" /><Run Text="&gt;" Foreground="Gray" />
+                        <Run Text="{Binding Sender, Mode=OneWay}" /> <Run Text="{Binding SenderAddressText, Mode=OneWay}" Foreground="Gray" />
                     </TextBlock>
                     <TextBlock Foreground="Gray" TextWrapping="Wrap">
                         <Run Text="{Binding Mailbox, Mode=OneWay}" /> · <Run Text="{Binding Received, Mode=OneWay}" /> · <Run Text="{Binding Status, Mode=OneWay}" />
@@ -89,19 +124,21 @@
                     <Button Content="Avaa Outlookissa (Ctrl+O)" HorizontalAlignment="Left" Margin="0,8,0,0" Padding="10,2"
                             Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
 
+                    <!-- The program's own warnings: outside the AI box so that blind mode does not hide them. -->
+                    <Border Background="#FDECEC" BorderBrush="#D9534F" BorderThickness="1" Padding="6" Margin="0,12,0,0"
+                            Visibility="{Binding SenderSuspected, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock TextWrapping="Wrap"
+                                   Text="Vastaanottava palvelin ei hyväksynyt lähettäjän tunnistusta, tai näyttönimessä on eri osoite kuin todellisella lähettäjällä. Viesti voi olla huijaus: älä maksa, avaa linkkejä tai anna tunnuksia ennen kuin olet varmistanut lähettäjän muuta kautta." />
+                    </Border>
+                    <Border Background="#FFF4E5" BorderBrush="#F0B35B" BorderThickness="1" Padding="6" Margin="0,12,0,0"
+                            Visibility="{Binding InjectionSuspected, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock TextWrapping="Wrap"
+                                   Text="Viestissä on tekoälylle osoitettua tekstiä. AI-arvio voi olla viestin ohjailema: tarkista viesti itse." />
+                    </Border>
+
                     <GroupBox Header="AI-arvio" Margin="0,12,0,0" Padding="6"
                               Visibility="{Binding ShowAi, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel>
-                            <Border Background="#FFF4E5" BorderBrush="#F0B35B" BorderThickness="1" Padding="6" Margin="0,0,0,8"
-                                    Visibility="{Binding InjectionSuspected, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock TextWrapping="Wrap"
-                                           Text="Viestissä on tekoälylle osoitettua tekstiä. Arvio voi olla viestin ohjailema: tarkista viesti itse." />
-                            </Border>
-                            <Border Background="#FDECEC" BorderBrush="#D9534F" BorderThickness="1" Padding="6" Margin="0,0,0,8"
-                                    Visibility="{Binding SenderSuspected, Converter={StaticResource BoolToVisibility}}">
-                                <TextBlock TextWrapping="Wrap"
-                                           Text="Vastaanottava palvelin ei hyväksynyt lähettäjän tunnistusta, tai näyttönimessä on eri osoite kuin todellisella lähettäjällä. Viesti voi olla huijaus: älä maksa, avaa linkkejä tai anna tunnuksia ennen kuin olet varmistanut lähettäjän muuta kautta." />
-                            </Border>
                             <TextBlock TextWrapping="Wrap">
                                 <Run Text="{Binding AiAction, Mode=OneWay}" FontWeight="SemiBold" /> · <Run Text="{Binding AiUrgency, Mode=OneWay}" /> · määräaika <Run Text="{Binding AiDeadline, Mode=OneWay}" /> · <Run Text="{Binding AiTopic, Mode=OneWay}" />
                             </TextBlock>

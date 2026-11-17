@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows;
 using System.Windows.Input;
 
 namespace EmailAnalyser.App;
@@ -57,6 +58,43 @@ public sealed class RelayCommand(Func<Task> execute, Func<bool>? canExecute = nu
 }
 
 public sealed record Option(string Key, string Text);
+
+/// <summary>A list filter whose text shows how many rows it matches.</summary>
+public sealed class FilterOption(string key, string label) : ObservableObject
+{
+    private int? _count;
+
+    public string Key { get; } = key;
+
+    public string Text => _count is { } count ? $"{label} ({count})" : label;
+
+    public int? Count
+    {
+        get => _count;
+        set
+        {
+            if (Set(ref _count, value))
+            {
+                OnPropertyChanged(nameof(Text));
+            }
+        }
+    }
+}
+
+/// <summary>Gives DataGrid columns, which are outside the visual tree, access to the view model.</summary>
+public sealed class BindingProxy : Freezable
+{
+    public static readonly DependencyProperty DataProperty =
+        DependencyProperty.Register(nameof(Data), typeof(object), typeof(BindingProxy));
+
+    public object? Data
+    {
+        get => GetValue(DataProperty);
+        set => SetValue(DataProperty, value);
+    }
+
+    protected override Freezable CreateInstanceCore() => new BindingProxy();
+}
 
 /// <summary>Finnish display texts for stored keys.</summary>
 public static class Display

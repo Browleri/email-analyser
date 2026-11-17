@@ -18,6 +18,7 @@ public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode)
     public DateTimeOffset ReceivedSort => Item.Received;
     public string Sender => SafeText.Clean(Item.SenderName, keepNewlines: false);
     public string SenderAddress => SafeText.Clean(Item.SenderAddress, keepNewlines: false);
+    public string SenderAddressText => SenderAddress.Length == 0 ? "" : $"<{SenderAddress}>";
     public string Subject => Item.Subject is not null
         ? SafeText.Clean(Item.Subject, keepNewlines: false)
         : Item.Assessment is not null || Item.Label is not null ? "(tunnistetiedot poistettu säilytysajan päätyttyä)" : "(ei vielä luettu)";
@@ -39,6 +40,41 @@ public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode)
         : "Tarkistettava: " + string.Join(", ", Item.Assessment.ReviewReasons.Select(Display.Text));
     public bool InjectionSuspected => Item.Assessment?.ReviewReasons.Contains(InjectionHeuristics.ReviewReason) == true;
     public bool SenderSuspected => Item.Assessment?.ReviewReasons.Contains(SenderAuthentication.ReviewReason) == true;
+
+    /// <summary>
+    /// The program's own checks, not the model's opinion: shown even in blind mode, because
+    /// a phishing warning matters more than an unbiased label.
+    /// </summary>
+    public bool HasWarning => SenderSuspected || InjectionSuspected;
+    public string WarningMark => HasWarning ? "⚠" : "";
+    public string? WarningTip =>
+        SenderSuspected ? "Lähettäjän tunnistus ei täsmää: viesti voi olla huijaus" :
+        InjectionSuspected ? "Viestissä on tekoälylle osoitettua tekstiä" : null;
+
+    /// <summary>Row highlight: danger (sender check failed), attention (reply or task) or review.</summary>
+    public string Emphasis =>
+        SenderSuspected ? "danger" :
+        !ShowAi ? "" :
+        Item.Assessment!.Action switch
+        {
+            "vastattava" or "tehtava" => "attention",
+            "tarkista" => "review",
+            _ => "",
+        };
+
+    /// <summary>Action and urgency in one column; the processing state when there is no current assessment.</summary>
+    public string ListAssessment =>
+        Item.Status != "assessed" || Item.Assessment is null ? Status :
+        ShowAi ? $"{AiAction} · {AiUrgency.ToLowerInvariant()}" : Hidden;
+
+    /// <summary>Most important first when sorted ascending: action, then urgency.</summary>
+    public int PrioritySort =>
+        Item.Status != "assessed" || Item.Assessment is null || !ShowAi
+            ? 99
+            : Rank(ActionPriority, Item.Assessment.Action) * 10 + Rank(UrgencyPriority, Item.Assessment.Urgency);
+
+    /// <summary>Nearest deadline first when sorted ascending; no deadline last.</summary>
+    public DateOnly DeadlineSort => ShowAi && Item.Assessment!.Deadline is { } deadline ? deadline : DateOnly.MaxValue;
     public string Category => Item.CategoryStatus is null
         ? ""
         : $"Outlook-luokka: {Item.CategoryOwned ?? "ei sovelluksen luokkaa"} ({Display.Text("luokka_" + Item.CategoryStatus)})";
@@ -56,17 +92,18 @@ public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode)
           $"{(Item.Label.Blind ? ", sokkona" : "")}{(Item.Label.AgreesWithAi ? ", sama kuin AI" : "")}.";
 
     private const string Hidden = "•••";
+    private static readonly string[] ActionPriority = ["vastattava", "tehtava", "tarkista", "tiedoksi"];
+    private static readonly string[] UrgencyPriority = ["tanaan", "talla_viikolla", "myohemmin", "ei_maaraaikaa"];
+
+    private static int Rank(string[] order, string key)
+    {
+        var index = Array.IndexOf(order, key);
+        return index < 0 ? 9 : index;
+    }
 }
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
-    public static readonly IReadOnlyList<Option> Filters =
-    [
-        new("kaikki", "Kaikki"), new("huomio", "Vastattava ja tehtävä"), new("vastattava", "Vastattava"), new("tehtava", "Tehtävä"),
-        new("tarkista", "Tarkista"), new("tiedoksi", "Tiedoksi"), new("merkitsematon", "Merkitsemättömät"),
-        new("huomiotta", "Huomiotta jääneet"), new("ongelmat", "Ongelmat ja jonossa"),
-    ];
-
     private const string AllMailboxes = "Kaikki laatikot";
 
     private readonly AnalyserStore _store;
@@ -78,12 +115,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private int _assessmentsAtReload;
     private int _assessmentsNow;
     private ItemViewModel? _selected;
-    private string _filter = "kaikki";
+    private string _filter = "huomio";
     private string _mailbox = AllMailboxes;
     private bool _blindMode;
     private string? _editAction, _editUrgency, _editTopic;
     private DateTime? _editDeadline;
-    private string _statusQueue = "", _statusBatch = "", _statusLabels = "", _statusProblems = "";
+    private string _statusList = "", _statusLabels = "", _statusProblems = "";
 
     public MainViewModel()
     {
@@ -116,7 +153,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<ItemViewModel> Items { get; } = [];
     public ICollectionView View { get; }
     public ObservableCollection<string> Mailboxes { get; } = [AllMailboxes];
-    public IReadOnlyList<Option> FilterOptions => Filters;
+    public IReadOnlyList<FilterOption> FilterOptions { get; } =
+    [
+        new("huomio", "Vaatii huomiota"), new("kaikki", "Kaikki"), new("vastattava", "Vastattava"), new("tehtava", "Tehtävä"),
+        new("tarkista", "Tarkista"), new("tiedoksi", "Tiedoksi"), new("merkitsematon", "Merkitsemättömät"),
+        new("huomiotta", "Huomiotta jääneet"), new("ongelmat", "Ongelmat ja jonossa"),
+    ];
+
+    /// <summary>The mailbox column is redundant when one mailbox is chosen.</summary>
+    public bool ShowMailboxColumn => Mailbox == AllMailboxes;
     public IReadOnlyList<Option> ActionOptions => Display.Actions;
     public IReadOnlyList<Option> UrgencyOptions => Display.Urgencies;
     public IReadOnlyList<Option> TopicOptions => Display.Topics;
@@ -172,6 +217,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (Set(ref _mailbox, value))
             {
                 View.Refresh();
+                UpdateFilterCounts();
+                OnPropertyChanged(nameof(ShowMailboxColumn));
             }
         }
     }
@@ -205,8 +252,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string? EditTopic { get => _editTopic; set => Set(ref _editTopic, value); }
     public DateTime? EditDeadline { get => _editDeadline; set => Set(ref _editDeadline, value); }
 
-    public string StatusQueue { get => _statusQueue; private set => Set(ref _statusQueue, value); }
-    public string StatusBatch { get => _statusBatch; private set => Set(ref _statusBatch, value); }
+    public string StatusList { get => _statusList; private set => Set(ref _statusList, value); }
     public string StatusLabels { get => _statusLabels; private set => Set(ref _statusLabels, value); }
     public string StatusProblems { get => _statusProblems; private set => Set(ref _statusProblems, value); }
 
@@ -254,10 +300,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _assessmentsAtReload = _assessmentsNow;
         OnPropertyChanged(nameof(NewResultsHint));
         var items = _store.GetReviewItems();
-        Items.Clear();
-        foreach (var item in items)
+        using (View.DeferRefresh())
         {
-            Items.Add(new ItemViewModel(item, () => BlindMode));
+            Items.Clear();
+            foreach (var item in items)
+            {
+                Items.Add(new ItemViewModel(item, () => BlindMode));
+            }
         }
 
         foreach (var mailbox in items.Select(i => i.Mailbox).Distinct().Order().Where(m => !Mailboxes.Contains(m)))
@@ -266,21 +315,31 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         Selected = selectId is null ? null : Items.FirstOrDefault(i => i.Id == selectId);
+        UpdateFilterCounts();
         UpdateStatus(items);
     }
 
-    private bool Matches(ItemViewModel vm)
-    {
-        if (Mailbox != AllMailboxes && vm.Item.Mailbox != Mailbox)
-        {
-            return false;
-        }
+    private bool Matches(ItemViewModel vm) => InMailbox(vm) && MatchesFilter(vm, Filter);
 
-        var action = vm.ShowAi ? vm.Item.Assessment!.Action : null;
-        return Filter switch
+    private bool InMailbox(ItemViewModel vm) => Mailbox == AllMailboxes || vm.Item.Mailbox == Mailbox;
+
+    private void UpdateFilterCounts()
+    {
+        var inMailbox = Items.Where(InMailbox).ToList();
+        foreach (var option in FilterOptions)
         {
-            "huomio" => action is "vastattava" or "tehtava",
-            "vastattava" or "tehtava" or "tarkista" or "tiedoksi" => action == Filter,
+            option.Count = inMailbox.Count(vm => MatchesFilter(vm, option.Key));
+        }
+    }
+
+    private static bool MatchesFilter(ItemViewModel vm, string filter)
+    {
+        var action = vm.ShowAi ? vm.Item.Assessment!.Action : null;
+        return filter switch
+        {
+            // The program's warnings count even in blind mode, where the action is hidden.
+            "huomio" => action is "vastattava" or "tehtava" or "tarkista" || vm.HasWarning,
+            "vastattava" or "tehtava" or "tarkista" or "tiedoksi" => action == filter,
             "merkitsematon" => !vm.IsLabeled && vm.Item.Assessment is not null,
             "huomiotta" => vm.Missed,
             "ongelmat" => vm.Item.Status is not "assessed",
@@ -371,11 +430,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void UpdateStatus(IReadOnlyList<ReviewItem> items)
     {
-        StatusQueue = $"Jonossa {items.Count(i => i.Status == "queued")} · arvioitu {items.Count(i => i.Assessment is not null)}/{items.Count}";
-        var last = _store.RecentBatches(1).FirstOrDefault();
-        StatusBatch = last is null
-            ? "Ei eriä"
-            : $"Viimeisin erä {last.Started.ToLocalTime():dd.MM. HH.mm}: {last.Outcome}{(last.Reason is null ? "" : $" ({last.Reason})")}";
+        // A snapshot of the list as of the last refresh; the live queue and batches are on the monitor line.
+        StatusList = $"Listassa {items.Count}, arvioitu {items.Count(i => i.Assessment is not null)} (päivitetty {DateTime.Now:HH.mm})";
         var labeled = items.Where(i => i.Label is not null).ToList();
         StatusLabels = $"Merkitty {labeled.Count}/{items.Count(i => i.Assessment is not null)} " +
                        $"(säätöosa {labeled.Count(l => l.Label!.Split == LabelSplit.Tuning)}, arviointiosa {labeled.Count(l => l.Label!.Split == LabelSplit.Holdout)})";

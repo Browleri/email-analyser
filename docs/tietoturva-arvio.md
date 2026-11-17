@@ -14,7 +14,7 @@ Injektio voi siis saada viestin näyttämään vähemmän tai enemmän tärkeäl
 
 Vaihe 5 lisäsi ainoan kirjoitusoikeuden: sovellus voi lisätä ja poistaa M365-viesteistä neljä omaa `AI:`-luokkaansa. Kirjoitus on oletuksena pois päältä. Luokka valitaan kiinteästä taulukosta, ja ohjailuyritys tai epäonnistunut lähettäjän tunnistus johtaa aina luokkaan `AI: Tarkista`. Kohde tarkistetaan Message-ID:n ja sisältötiivisteen perusteella, ja jokainen muutos voidaan palauttaa. Mallin tekstiä ei kirjoiteta Outlookiin.
 
-Arvioinnissa löytyi toteutuksesta kymmenen korjattavaa kohtaa (F1–F10) ja vaiheen 5 toteutuksessa kuusi lisää (F11–F16). Ne on korjattu ja testattu. Vakavimmat olivat:
+Arvioinnissa löytyi toteutuksesta kymmenen korjattavaa kohtaa (F1–F10) ja vaiheen 5 toteutuksessa kuusi lisää (F11–F16). Ne on korjattu ja testattu. Käyttöliittymän arvioinnissa löytyi vielä yksi (F17): sokkomerkintä piilotti huijausvaroituksen. Vakavimmat olivat:
 - hyökkäystestauksessa malli totteli viestiin upotettua väärennettyä järjestelmäohjetta, ja maksuhuijaus luokiteltiin "tehtävä tänään" -viestiksi (F10). Nyt ohjailua sisältävä viesti ohjataan aina tarkistettavaksi,
 - yksittäinen viesti pystyi pysäyttämään koko käsittelyn (F1),
 - LM Studion kehotteiden lokitus olisi voinut palata päälle huomaamatta (F8),
@@ -152,6 +152,7 @@ Todennäköisyys (T) ja vaikutus (V) ovat asteikolla 1–3. Taso on T × V: 1–
 | F14 | Outlookin sulkeminen tai uudelleenkäynnistys olisi jättänyt sovitimeen vanhentuneen COM-olion, ja jokainen kutsu olisi epäonnistunut | Katkoksen virhekoodit vapauttavat olion. Seuraava kutsu liittyy taas käynnissä olevaan Outlookiin, ja erä pysähtyy laskematta yritystä viestille | `Outlook_going_away_mid_batch_…`, `Outlook_unavailable_…` |
 | F15 | Säilytysajan poistamat rivit olisivat jääneet tietokannan vapaille sivuille | `PRAGMA secure_delete = ON` | – |
 | F16 | Koeajossa "Käsittele nyt" jätti herätteen odottamaan, joten seuraava erä alkoi heti ilman taukoa, eikä näytönohjain vapautunut erien välillä (R22, R23) | Kierros kuluttaa odottavan herätteen alussa | `Process_now_runs_one_round_and_then_waits_for_the_interval` |
+| F17 | Käyttöliittymän arvioinnissa: huijaus- ja ohjailuvaroitus olivat AI-arvion laatikossa, joten sokkomerkintä piilotti ne, eikä listassa näkynyt varoitusta lainkaan (R1, R2) | Varoitukset näytetään AI-arvion ulkopuolella myös sokkotilassa. Listassa on varoitussarake ja punainen rivi, ja oletussuodatin "Vaatii huomiota" sisältää varoitetut viestit. Varoitus voi ohjata sokkomerkintää kohti "tarkista", mutta huijausvaroitus on tärkeämpi kuin puolueeton merkintä | Käännös; näkymän tarkistus käsin |
 
 ## Hyökkäystapausten tulokset
 
