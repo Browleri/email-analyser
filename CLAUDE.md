@@ -23,7 +23,12 @@ Paikallinen AI-avustaja Classic Outlookiin. Ohjelma lukee käyttäjän Outlook-l
 dotnet build
 dotnet run --project src/OutlookProbe -- stores     # laatikot ja kansiot
 dotnet run --project src/OutlookProbe -- selected   # Outlookissa valittu viesti
+dotnet run --project src/OutlookProbe -- read-test 1 4 --count 10   # lukutila ja suojatut ominaisuudet, ei sisältöä
+dotnet run --project src/OutlookProbe -- category-test "AI: testiviesti" --store 1 --expect-unread   # vain testiviestiin
+dotnet run --project src/OutlookProbe -- open 1 "AI: testiviesti"   # avaa viestin viitteen perusteella
 ```
+
+Tietovarastojen numerot ovat `stores`-komennon järjestyksessä ja voivat muuttua, kun profiiliin lisätään tilejä.
 
 ## Dokumentointivastuut
 

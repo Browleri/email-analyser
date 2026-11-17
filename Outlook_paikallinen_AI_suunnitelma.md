@@ -70,6 +70,8 @@ Outlook COM -kutsut hoidetaan omalla STA-säikeellä ja tarvittavalla viestipump
 - Sovellus ja Outlook ajetaan samalla oikeustasolla ilman järjestelmänvalvojan oikeuksia. Oikeustasojen ero estää COM-yhteyden.
 - Outlookin interop-tyypit (NuGet `Microsoft.Office.Interop.Outlook`) upotetaan ohjelmaan (`EmbedInteropTypes`). Muuten .NET 10 yrittää ladata ajon aikana `office.dll`-kokoonpanon, eikä löydä sitä.
 - Kansion viestit luetellaan `Folder.GetTable()`-taululla. Sarakkeiksi haetaan EntryID, ReceivedTime, LastModificationTime ja `PR_INTERNET_MESSAGE_ID`, jolloin kaikkia viestejä ei tarvitse avata. Aikasuodatus tehdään DASL-kyselynä (`urn:schemas:httpmail:datereceived`), koska `Restrict` riippuu alueasetusten päivämäärämuodosta.
+- Taulun `EntryID`-sarake palauttaa Exchange-laatikoissa lyhytaikaisen tunnisteen (48 merkkiä), joka on voimassa vain istunnon ajan. Tallennettava pitkäaikainen tunniste (140 merkkiä) luetaan sarakkeesta `http://schemas.microsoft.com/mapi/proptag/0x66700102` (`PR_LONGTERM_ENTRYID_FROM_TABLE`, muunnos `Row.BinaryToString`). Se on sama kuin viestiobjektin `EntryID`, ja viesti avautuu sillä.
+- COM-kokoelmat (`Accounts`, `Stores`, `Folders`) käydään läpi indekseillä eikä `foreach`-silmukalla. `foreach`-läpikäynnillä Gmail-tietovarasto ei yhdistynyt IMAP-tiliinsä, indekseillä se yhdistyi.
 - `Body` ja `SenderEmailAddress` kuuluvat ohjelmallisen käytön suojauksen piiriin. Niiden toiminta ilman kehotteita on vaiheen 1 hyväksymisehto.
 - IRM- tai OME-salatun viestin tekstiä ei välttämättä voi lukea. Tällainen viesti merkitään tilaan Tarkista eikä sitä luokitella sisällön perusteella.
 - Gmailista seurataan vain Saapuneet-kansiota ja käyttäjän valitsemia kansioita, ei kansiota `[Gmail]/Kaikki viestit`. Jos IMAP-tili lataa vain otsikot, tekstiä ei ole saatavilla ja viesti merkitään tilaan Tarkista.
@@ -211,6 +213,18 @@ Hyväksytty, kun:
 - muiden luokkien ja lukutilan säilyminen on todettu,
 - ohjelma ei käynnistä Outlookia, jos se on suljettu,
 - suojauskehotteiden ja mahdollisten organisaatiorajoitusten vaikutus tunnetaan; jos suojausasetus estää käytön, sitä ei poisteta automaattisesti.
+
+Tulokset 17.11.2026 (ohjelma `src/OutlookProbe`):
+
+- **Laatikot:** profiilissa on 10 tietovarastoa. Seurantaan valittiin kuusi: viisi M365-laatikkoa (yksi ensisijainen ja neljä lisäpostilaatikkoa) ja Gmail. Neljä jaettua laatikkoa jätettiin pois. Synkronointiongelmat-kansioita ei seurata; yhdessä laatikossa niissä on yli 9 000 kohdetta.
+- **Lukeminen:** jokaisesta valitusta laatikosta luettiin 10 uusinta sähköpostia `GetTable`-taululla, yhteensä 60. `Body` ja `SenderEmailAddress` saatiin luettua ilman suojauskehotteita, myös Gmailista, joten IMAP-tili ei lataa pelkkiä otsikoita. Lukutila ei muuttunut yhdessäkään viestissä, myöskään lukemattomissa. Viestiä kohden luku kesti 9–51 ms. Message-ID löytyi kaikista. Pisin teksti oli noin 158 000 merkkiä, joten katkaisu on tarpeen.
+- **Luokat:** testiviestiin lisättiin luokka `AI: Tarkista` ja se poistettiin. Käyttäjän luokka säilyi ja palautui, ja lukutila säilyi. Listaerotin on tällä koneella pilkku (`,`).
+- **Luokka lukemattomaan viestiin:** Outlookin lukuruutu merkitsee valitun viestin luetuksi, joten testiviesti haettiin lisäksi otsikon perusteella ilman valintaa. Kun testiviesti oli lukematon, luokan lisäys ja poisto säilyttivät käyttäjän luokan ja lukutilan.
+- **Avaaminen:** testiviesti avattiin Outlookin ikkunaan StoreID:n ja EntryID:n perusteella. Avaaminen merkitsee viestin luetuksi, mikä on odotettua, koska käyttäjä avaa viestin itse.
+- **Tilityypit:** kaikki viisi M365-laatikkoa tunnistuvat Exchange-tileiksi ja Gmail IMAP-tiliksi, kun tilit käydään läpi indekseillä (ks. COM-toteutuksen yksityiskohdat).
+- **EntryID:** taulu palauttaa lyhytaikaisen tunnisteen ja pitkäaikainen luetaan erillisestä sarakkeesta (ks. COM-toteutuksen yksityiskohdat).
+
+Vaiheen 1 hyväksymisehdot täyttyivät 17.11.2026. Organisaatiorajoituksia tai suojauskehotteita ei havaittu.
 
 ### 2. Paikallinen arviointi
 

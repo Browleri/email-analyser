@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Outlook = Microsoft.Office.Interop.Outlook;
 
 namespace OutlookProbe;
@@ -16,9 +16,25 @@ internal static class Program
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         var command = args.Length > 0 ? args[0].ToLowerInvariant() : "help";
-        if (command is not ("stores" or "selected"))
+        var storeOption = OptionValue(args, "--store") is { } s && int.TryParse(s, out var sn) ? sn : (int?)null;
+        var valid = command switch
         {
-            Console.WriteLine("Käyttö: OutlookProbe stores | selected");
+            "stores" or "selected" => true,
+            "read-test" => ParseStoreNumbers(args) is not null,
+            "category-test" => args.Length >= 2 && !args[1].StartsWith("--", StringComparison.Ordinal) &&
+                               (OptionValue(args, "--store") is null || storeOption is not null),
+            "open" => args.Length == 3 && int.TryParse(args[1], out _),
+            _ => false,
+        };
+        if (!valid)
+        {
+            Console.WriteLine("Käyttö:");
+            Console.WriteLine("  OutlookProbe stores");
+            Console.WriteLine("  OutlookProbe selected");
+            Console.WriteLine("  OutlookProbe read-test <tietovarastojen numerot> [--count N] [--match \"otsikon osa\"]");
+            Console.WriteLine("  OutlookProbe category-test \"tarkka otsikko\" [--store N] [--expect-unread]");
+            Console.WriteLine("      ilman --store: Outlookissa valittu viesti; --store N: tietovaraston N Saapuneet");
+            Console.WriteLine("  OutlookProbe open <tietovaraston numero> \"tarkka otsikko\"");
             return command == "help" ? 0 : 1;
         }
 
@@ -31,7 +47,14 @@ internal static class Program
 
         try
         {
-            return command == "stores" ? ListStores(app) : ShowSelected(app);
+            return command switch
+            {
+                "stores" => ListStores(app),
+                "selected" => ShowSelected(app),
+                "read-test" => ReadTest.Run(app, ParseStoreNumbers(args)!, OptionValue(args, "--count") is { } c ? int.Parse(c) : 10, OptionValue(args, "--match")),
+                "category-test" => CategoryTest.Run(app, args[1], storeOption, args.Contains("--expect-unread")),
+                _ => OpenTest.Run(app, int.Parse(args[1]), args[2]),
+            };
         }
         catch (COMException ex)
         {
@@ -42,6 +65,34 @@ internal static class Program
         {
             Marshal.ReleaseComObject(app);
         }
+    }
+
+    private static List<int>? ParseStoreNumbers(string[] args)
+    {
+        var numbers = new List<int>();
+        for (var i = 1; i < args.Length; i++)
+        {
+            if (args[i].StartsWith("--", StringComparison.Ordinal))
+            {
+                i++; // skip the option's value
+                continue;
+            }
+
+            if (!int.TryParse(args[i], out var n))
+            {
+                return null;
+            }
+
+            numbers.Add(n);
+        }
+
+        return numbers.Count > 0 ? numbers : null;
+    }
+
+    private static string? OptionValue(string[] args, string name)
+    {
+        var index = Array.IndexOf(args, name);
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
     }
 
     private static int ListStores(Outlook.Application app)
@@ -158,16 +209,18 @@ internal static class Program
 
     private static Dictionary<string, Outlook.Account> MapAccountsToStores(Outlook.NameSpace session)
     {
-        var map = new Dictionary<string, Outlook.Account>();
-        foreach (Outlook.Account account in session.Accounts)
+        var map = new Dictionary<string, Outlook.Account>(StringComparer.OrdinalIgnoreCase);
+        var accounts = session.Accounts;
+        for (var i = 1; i <= accounts.Count; i++)
         {
+            var account = accounts[i];
             try
             {
                 map[account.DeliveryStore.StoreID] = account;
             }
-            catch (COMException)
+            catch (COMException ex)
             {
-                // Some account types have no delivery store.
+                Console.Error.WriteLine($"Tilin {i} toimitusvarastoa ei saatu: {ex.Message} (HRESULT 0x{ex.HResult:X8})");
             }
         }
 
