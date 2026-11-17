@@ -36,6 +36,9 @@ internal static class Program
                 "status" => Status(),
                 "report" => Report(),
                 "eval" => await Eval(args, cts.Token),
+                "labels" => EvaluateLabels(args),
+                "injection-scan" => await InjectionScan(),
+                "requeue" => Requeue(args),
                 "verify-logs" => VerifyLogs(),
                 "db-check" => DbCheck(),
                 _ => Help(),
@@ -64,6 +67,10 @@ internal static class Program
               status                                  jonon tila ja viimeiset erät
               report                                  koosteluvut arvioista (ei sisältöä)
               eval [--models a,b] [--file polku]      mallivertailu keinotekoisilla viesteillä
+              labels [--split arviointi|saato|kaikki] arvioiden osuvuus käyttäjän merkintöihin (oletus arviointi)
+              requeue --labeled saato|arviointi|kaikki merkityt viestit uudelleen jonoon (esim. uuden kehotteen mittaus)
+              requeue --all                           kaikki käsitellyt viestit uudelleen jonoon (kehotteen vaihtuessa)
+              injection-scan                          ohjailuheuristiikan osumat oikeissa viesteissä (vain määrät)
               verify-logs                             tarkista, ettei LM Studion lokeissa ole viestisisältöä
               db-check                                tarkista, ettei tietokanta aukea ilman avainta
             """);
@@ -132,7 +139,7 @@ internal static class Program
         using var lmStudio = new LmStudioClient(settings.LmStudioUrl, TimeSpan.FromMinutes(5));
         using var a1111 = new Automatic1111Probe(settings.Automatic1111Url);
         var classifier = new Classifier(lmStudio, PromptTemplate.LoadEmbedded(), settings.ToClassifierOptions());
-        var runner = new BatchRunner(store, lmStudio, a1111, outlook, classifier, TimeProvider.System, new NvidiaSmiProbe());
+        var runner = new BatchRunner(store, lmStudio, a1111, outlook, classifier, TimeProvider.System, new NvidiaSmiProbe(), new LmStudioPrivacyCheck());
         Console.WriteLine($"Malli {settings.Model}, kehote {classifier.Prompt.Version}");
 
         var processed = 0;
@@ -142,9 +149,10 @@ internal static class Program
             var result = await runner.RunAsync(options, p =>
                 Console.WriteLine($"  {p.Index,3}/{p.Total}  {p.Status,-20} {p.Action,-11} {p.Urgency,-15} {p.Duration.TotalSeconds,5:0.0} s"),
                 cancellationToken);
-            processed += result.Assessed + result.Invalid + result.Unavailable;
+            processed += result.Assessed + result.Invalid + result.Unavailable + result.Failed;
             Console.WriteLine($"Erä: {Describe(result.Outcome)}{(result.Reason is null ? "" : $" ({result.Reason})")}; " +
-                              $"arvioitu {result.Assessed}, virheellisiä {result.Invalid}, ei luettavissa {result.Unavailable}, jonossa {result.Remaining}");
+                              $"arvioitu {result.Assessed}, virheellisiä {result.Invalid}, ei luettavissa {result.Unavailable}, " +
+                              $"epäonnistui {result.Failed}, jonossa {result.Remaining}");
             if (result.Outcome is BatchOutcome.NothingQueued or BatchOutcome.Deferred ||
                 result.Outcome == BatchOutcome.Stopped && result.Reason != "erän enimmäiskesto täyttyi" ||
                 result.Remaining == 0)
@@ -223,6 +231,90 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine("Merkit: toimenpide, kiireellisyys, määräaika, aihe, tarkistettava (+ oikein, x väärin, . ei arvioitu)");
         Console.WriteLine($"Tulokset: {outFile}");
+        return 0;
+    }
+
+    private static int EvaluateLabels(string[] args)
+    {
+        var split = Option(args, "--split") ?? LabelSplit.Holdout;
+        using var store = OpenStore();
+        var items = store.GetReviewItems();
+        var r = LabelEvaluation.Compute(items, split == "kaikki" ? null : split);
+        Console.WriteLine($"Osa: {r.Split}. Merkittyjä {r.Labeled}, joista arvioituja {r.Assessed}. " +
+                          $"Kaikkiaan merkitty {items.Count(i => i.Label is not null)}/{items.Count}.");
+        if (r.Assessed == 0)
+        {
+            return 0;
+        }
+
+        Console.WriteLine($"Huomiota vaativat löytyivät {r.AttentionFound}/{r.AttentionExpected} ({Pct(r.Recall)}), " +
+                          $"joista tarkista-tilan kautta {r.AttentionFoundAsReview}. Huomiotta jääneitä {r.MissedMessageIds.Count}.");
+        Console.WriteLine($"Turhia hälytyksiä {r.FalseAlarms}/{r.NoAttentionExpected}.");
+        Console.WriteLine($"Oikein: toimenpide {r.ActionCorrect}/{r.Assessed}, kiireellisyys {r.UrgencyCorrect}/{r.Assessed}, " +
+                          $"aihe {r.TopicCorrect}/{r.Assessed}, määräaika {r.DeadlineCorrect}/{r.Assessed}.");
+        Console.WriteLine($"AI täysin samaa mieltä: sokkona merkityistä {r.AgreeBlind}/{r.LabeledBlind}, arvio näkyvillä {r.AgreeSeen}/{r.LabeledSeen}.");
+        Console.WriteLine($"Kehoteversiot: {string.Join(", ", r.PromptVersions.Select(kv => $"{kv.Key} {kv.Value}"))}");
+        if (r.MissedMessageIds.Count > 0)
+        {
+            Console.WriteLine($"Huomiotta jääneiden viestien tunnisteet (näkymän suodatin \"Huomiotta jääneet\"): {string.Join(", ", r.MissedMessageIds)}");
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Measures how often the injection heuristic fires on real messages (false
+    /// positives force review). Reads bodies into memory only; prints counts.
+    /// </summary>
+    private static async Task<int> InjectionScan()
+    {
+        using var store = OpenStore();
+        using var outlook = new OutlookMailbox();
+        var hits = new Dictionary<string, int>();
+        var totals = new Dictionary<string, int>();
+        foreach (var item in store.GetReviewItems())
+        {
+            var read = await outlook.ReadAsync(item.Reference, item.Mailbox, CancellationToken.None);
+            if (read.Message is not { } m)
+            {
+                continue;
+            }
+
+            totals[item.Mailbox] = totals.GetValueOrDefault(item.Mailbox) + 1;
+            if (InjectionHeuristics.Detect(m.Subject + "\n" + m.Body))
+            {
+                hits[item.Mailbox] = hits.GetValueOrDefault(item.Mailbox) + 1;
+            }
+        }
+
+        foreach (var (mailbox, total) in totals.OrderBy(kv => kv.Key))
+        {
+            Console.WriteLine($"  {mailbox}: {hits.GetValueOrDefault(mailbox)}/{total}");
+        }
+
+        Console.WriteLine($"Heuristiikka osui {hits.Values.Sum()} viestiin {totals.Values.Sum()}:stä.");
+        return 0;
+    }
+
+    private static int Requeue(string[] args)
+    {
+        if (args.Contains("--all"))
+        {
+            using var all = OpenStore();
+            Console.WriteLine($"Jonoon palautettiin {all.RequeueAll(DateTimeOffset.UtcNow)} viestiä. Merkinnät ja aiemmat arviot säilyvät.");
+            return 0;
+        }
+
+        var split = Option(args, "--labeled");
+        if (split is not (LabelSplit.Tuning or LabelSplit.Holdout or "kaikki"))
+        {
+            Console.Error.WriteLine("Anna osa: requeue --labeled saato|arviointi|kaikki");
+            return 1;
+        }
+
+        using var store = OpenStore();
+        var count = store.RequeueLabeled(split == "kaikki" ? null : split, DateTimeOffset.UtcNow);
+        Console.WriteLine($"Jonoon palautettiin {count} merkittyä viestiä. Merkinnät säilyvät; aja seuraavaksi run.");
         return 0;
     }
 

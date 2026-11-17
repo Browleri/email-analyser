@@ -10,7 +10,7 @@ public enum BatchOutcome
     Stopped,
 }
 
-public sealed record BatchResult(BatchOutcome Outcome, string? Reason, int Assessed, int Invalid, int Unavailable, int Remaining);
+public sealed record BatchResult(BatchOutcome Outcome, string? Reason, int Assessed, int Invalid, int Unavailable, int Remaining, int Failed = 0);
 
 public sealed record BatchOptions(string ModelKey, int MaxMessages = 200, TimeSpan? MaxDuration = null)
 {
@@ -32,7 +32,8 @@ public sealed class BatchRunner(
     IMessageSource source,
     Classifier classifier,
     TimeProvider time,
-    IGpuMemoryProbe? gpuMemory = null)
+    IGpuMemoryProbe? gpuMemory = null,
+    IPrivacyCheck? privacy = null)
 {
     public async Task<BatchResult> RunAsync(BatchOptions options, Action<MessageProgress>? progress, CancellationToken cancellationToken)
     {
@@ -51,7 +52,7 @@ public sealed class BatchRunner(
 
         var batchId = store.StartBatch(options.ModelKey, gpuMemory?.UsedMiB(), time.GetUtcNow());
         string? instance = null;
-        int assessed = 0, invalid = 0, unavailable = 0;
+        int assessed = 0, invalid = 0, unavailable = 0, failed = 0;
         var outcome = BatchOutcome.Completed;
         string? reason = null;
         try
@@ -87,7 +88,27 @@ public sealed class BatchRunner(
                     continue;
                 }
 
-                var result = await classifier.ClassifyAsync(instance, read.Message!, HelsinkiTime.Now(time), cancellationToken);
+                ClassificationOutcome result;
+                try
+                {
+                    result = await classifier.ClassifyAsync(instance, read.Message!, HelsinkiTime.Now(time), cancellationToken);
+                }
+                catch (ModelServerException ex) when (ex.Kind == ModelFailureKind.Rejected && assessed + invalid > 0)
+                {
+                    // The server has worked in this batch, so the refusal is about this message
+                    // (e.g. too many tokens). Fail it instead of blocking the queue.
+                    store.RecordFailure(message, ex.Message, failNow: true, time.GetUtcNow());
+                    failed++;
+                    progress?.Invoke(new MessageProgress(i + 1, queued.Count, "mallipalvelin hylkäsi", null, null, TimeSpan.Zero));
+                    continue;
+                }
+                catch (ModelServerException ex) when (ex.Kind != ModelFailureKind.Unavailable)
+                {
+                    // Count the attempt against the message so one message cannot stop every batch.
+                    store.RecordFailure(message, ex.Message, failNow: false, time.GetUtcNow());
+                    throw;
+                }
+
                 store.SaveAssessment(message, read.Message!, result, batchId, options.ModelKey, classifier.Prompt.Version, settingsJson, time.GetUtcNow());
                 if (result.IsValid)
                 {
@@ -122,12 +143,17 @@ public sealed class BatchRunner(
         }
 
         var remaining = store.GetQueued(int.MaxValue).Count;
-        return new BatchResult(outcome, reason, assessed, invalid, unavailable, remaining);
+        return new BatchResult(outcome, reason, assessed, invalid, unavailable, remaining, failed);
     }
 
     /// <summary>Returns a deferral reason, or null when the batch may start.</summary>
     private async Task<string?> CheckPreconditionsAsync(CancellationToken cancellationToken)
     {
+        if (privacy?.Problem() is { } privacyProblem)
+        {
+            return privacyProblem;
+        }
+
         if (await gpuActivity.IsGeneratingAsync(cancellationToken))
         {
             return "Automatic1111 generoi kuvaa";

@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/EmailAnalyser.App/EmailAnalyser.App.csproj" />
     <Project Path="src/EmailAnalyser.Cli/EmailAnalyser.Cli.csproj" />
     <Project Path="src/EmailAnalyser.Core/EmailAnalyser.Core.csproj" />
     <Project Path="src/EmailAnalyser.Outlook/EmailAnalyser.Outlook.csproj" />

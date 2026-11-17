@@ -23,6 +23,8 @@ public sealed class EvalCase
     [JsonPropertyName("fromAddress")] public string FromAddress { get; init; } = "";
     [JsonPropertyName("to")] public string To { get; init; } = "";
     [JsonPropertyName("cc")] public string Cc { get; init; } = "";
+    /// <summary>suora, kopio or ei_nimetty; default suora.</summary>
+    [JsonPropertyName("role")] public string Role { get; init; } = "suora";
     [JsonPropertyName("received")] public DateTimeOffset Received { get; init; }
     [JsonPropertyName("subject")] public string Subject { get; init; } = "";
     [JsonPropertyName("body")] public string Body { get; init; } = "";
@@ -44,7 +46,13 @@ public sealed class EvalCase
             body = body + "\n\n" + filler;
         }
 
-        return new MessageForAssessment(Mailbox, From, FromAddress, To, Cc, Received, Subject, body);
+        var role = Role switch
+        {
+            "kopio" => RecipientRole.Copy,
+            "ei_nimetty" => RecipientRole.NotNamed,
+            _ => RecipientRole.Direct,
+        };
+        return new MessageForAssessment(Mailbox, From, FromAddress, To, Cc, Received, Subject, body, role);
     }
 }
 

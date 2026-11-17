@@ -48,6 +48,7 @@ public sealed class PromptTemplate
             .Replace("{{from}}", OneLine(from), StringComparison.Ordinal)
             .Replace("{{to}}", OneLine(Limit(message.To, 300)), StringComparison.Ordinal)
             .Replace("{{cc}}", OneLine(Limit(message.Cc, 300)), StringComparison.Ordinal)
+            .Replace("{{role}}", DescribeRole(message.Role), StringComparison.Ordinal)
             .Replace("{{received}}", Format(TimeZoneInfo.ConvertTime(message.Received, helsinki)), StringComparison.Ordinal)
             .Replace("{{subject}}", OneLine(Limit(message.Subject, 300)), StringComparison.Ordinal)
             .Replace("{{truncated}}", body.Truncated ? "kyllä" : "ei", StringComparison.Ordinal)
@@ -60,8 +61,16 @@ public sealed class PromptTemplate
     private static string FormatDate(DateOnly date) =>
         date.ToString("yyyy'-'MM'-'dd '('dddd')'", CultureInfo.GetCultureInfo("fi-FI"));
 
+    private static string DescribeRole(RecipientRole role) => role switch
+    {
+        RecipientRole.Direct => "suora vastaanottaja (Vastaanottajat-kentässä)",
+        RecipientRole.Copy => "vain kopiona (Kopio-kentässä)",
+        RecipientRole.NotNamed => "ei nimetty vastaanottajissa (esim. jakelulista tai piilokopio)",
+        _ => "ei tiedossa",
+    };
+
     private static string OneLine(string value) =>
-        value.Replace('\r', ' ').Replace('\n', ' ').Replace("<<<", "‹‹‹", StringComparison.Ordinal).Replace(">>>", "›››", StringComparison.Ordinal).Trim();
+        SafeText.Clean(value, keepNewlines: false).Replace("<<<", "‹‹‹", StringComparison.Ordinal).Replace(">>>", "›››", StringComparison.Ordinal).Trim();
 
     private static string Limit(string value, int max) => value.Length <= max ? value : value[..max] + " …";
 

@@ -22,6 +22,8 @@ toimenpide:
 - tiedoksi: viesti ei vaadi vastaanottajalta toimia; tähän kuuluvat myös uutiskirjeet, kuitit, ilmoitukset ja automaattiset viestit
 - tarkista: toimenpidettä ei voi päätellä luotettavasti, tai viesti vaikuttaa kalastelulta tai huijaukselta
 
+Käyttäjän rooli kertoo, onko postilaatikon omistaja viestin suora vastaanottaja vai vain kopiona. Jos käyttäjä on vain kopiona eikä häntä pyydetä erikseen tekemään mitään, toimenpide on tiedoksi.
+
 Markkinoinnin kiirehtiminen ("tarjous päättyy tänään") ei tee viestistä vastattavaa tai tehtävää. Kalastelulta näyttävä viesti on aina tarkista, vaikka se vaatisi kiireellistä toimintaa.
 
 kiireellisyys: vertaa määräaikaa viestin tiedoissa annettuihin rajapäiviin, älä laske päiviä itse.

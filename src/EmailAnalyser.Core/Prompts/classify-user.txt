@@ -4,6 +4,7 @@ Postilaatikko: {{mailbox}}
 Lähettäjä: {{from}}
 Vastaanottajat: {{to}}
 Kopio: {{cc}}
+Käyttäjän rooli: {{role}}
 Vastaanotettu: {{received}}
 Otsikko: {{subject}}
 Sisältö katkaistu: {{truncated}}

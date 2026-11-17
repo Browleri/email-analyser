@@ -40,7 +40,23 @@ public static class LoopbackGuard
         };
 }
 
-public sealed class ModelServerException(string message, Exception? inner = null) : Exception(message, inner);
+public enum ModelFailureKind
+{
+    /// <summary>Server not reachable: not the message's fault.</summary>
+    Unavailable,
+    /// <summary>No answer in time while processing a request.</summary>
+    Timeout,
+    /// <summary>HTTP 5xx or a malformed answer.</summary>
+    ServerError,
+    /// <summary>HTTP 400/413/422: the server refused this request (e.g. too many tokens).</summary>
+    Rejected,
+}
+
+public sealed class ModelServerException(string message, ModelFailureKind kind = ModelFailureKind.Unavailable, Exception? inner = null)
+    : Exception(message, inner)
+{
+    public ModelFailureKind Kind { get; } = kind;
+}
 
 public sealed record LoadedInstance(string ModelKey, string InstanceId);
 
@@ -96,7 +112,7 @@ public sealed class LmStudioClient : ILanguageModelServer, IDisposable
         var started = Stopwatch.GetTimestamp();
         var root = await SendAsync(HttpMethod.Post, "/api/v1/models/load", body, cancellationToken);
         var id = root["instance_id"]?.GetValue<string>()
-                 ?? throw new ModelServerException("LM Studio ei palauttanut ladatun instanssin tunnistetta.");
+                 ?? throw new ModelServerException("LM Studio ei palauttanut ladatun instanssin tunnistetta.", ModelFailureKind.ServerError);
         var seconds = root["load_time_seconds"]?.GetValue<double>() ?? Stopwatch.GetElapsedTime(started).TotalSeconds;
         return new LoadResult(id, seconds);
     }
@@ -158,22 +174,26 @@ public sealed class LmStudioClient : ILanguageModelServer, IDisposable
             if (!response.IsSuccessStatusCode)
             {
                 // The error body may echo the request, so only the status is reported.
-                throw new ModelServerException($"LM Studio {path}: HTTP {(int)response.StatusCode}");
+                var status = (int)response.StatusCode;
+                var kind = status is 400 or 413 or 422 ? ModelFailureKind.Rejected
+                    : status >= 500 ? ModelFailureKind.ServerError
+                    : ModelFailureKind.Unavailable;
+                throw new ModelServerException($"LM Studio {path}: HTTP {status}", kind);
             }
 
-            return JsonNode.Parse(text) ?? throw new ModelServerException($"LM Studio {path}: tyhjä vastaus");
+            return JsonNode.Parse(text) ?? throw new ModelServerException($"LM Studio {path}: tyhjä vastaus", ModelFailureKind.ServerError);
         }
         catch (HttpRequestException ex)
         {
-            throw new ModelServerException($"LM Studio ei vastaa ({path}).", ex);
+            throw new ModelServerException($"LM Studio ei vastaa ({path}).", ModelFailureKind.Unavailable, ex);
         }
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new ModelServerException($"LM Studio ei vastannut ajoissa ({path}).", ex);
+            throw new ModelServerException($"LM Studio ei vastannut ajoissa ({path}).", ModelFailureKind.Timeout, ex);
         }
         catch (JsonException ex)
         {
-            throw new ModelServerException($"LM Studio {path}: vastaus ei ole JSONia.", ex);
+            throw new ModelServerException($"LM Studio {path}: vastaus ei ole JSONia.", ModelFailureKind.ServerError, ex);
         }
     }
 }

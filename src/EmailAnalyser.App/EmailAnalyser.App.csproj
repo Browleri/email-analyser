@@ -1,0 +1,14 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>EmailAnalyser</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EmailAnalyser.Core\EmailAnalyser.Core.csproj" />
+    <ProjectReference Include="..\EmailAnalyser.Outlook\EmailAnalyser.Outlook.csproj" />
+  </ItemGroup>
+
+</Project>

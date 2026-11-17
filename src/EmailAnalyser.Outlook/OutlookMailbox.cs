@@ -18,6 +18,7 @@ public sealed class OutlookMailbox : IMessageSource, IDisposable
 {
     private const string LongTermEntryIdProperty = "http://schemas.microsoft.com/mapi/proptag/0x66700102";
     private const string MessageIdProperty = "http://schemas.microsoft.com/mapi/proptag/0x1035001F";
+    private const string SmtpAddressProperty = "http://schemas.microsoft.com/mapi/proptag/0x39FE001F";
     private const int MapiNotFound = unchecked((int)0x8004010F);
 
     private readonly StaDispatcher _sta = new();
@@ -134,13 +135,109 @@ public sealed class OutlookMailbox : IMessageSource, IDisposable
                 var received = new DateTimeOffset(DateTime.SpecifyKind(mail.ReceivedTime, DateTimeKind.Local));
                 return MessageReadResult.Found(new MessageForAssessment(
                     mailbox, mail.SenderName ?? "", SenderAddress(mail), mail.To ?? "", mail.CC ?? "",
-                    received, mail.Subject ?? "", body));
+                    received, mail.Subject ?? "", body, RoleOf(mail, mailbox)));
             }
             finally
             {
                 Marshal.ReleaseComObject(item);
             }
         });
+
+    /// <summary>
+    /// Opens the message in an Outlook window. Outlook marks it read, as when the
+    /// user opens it. Returns false if the message no longer exists.
+    /// </summary>
+    public Task<bool> DisplayAsync(MessageReference reference) =>
+        _sta.InvokeAsync(() =>
+        {
+            object item;
+            try
+            {
+                item = App().Session.GetItemFromID(reference.EntryId, reference.StoreId);
+            }
+            catch (COMException ex) when (ex.HResult == MapiNotFound)
+            {
+                return false;
+            }
+
+            try
+            {
+                if (item is OL.MailItem mail)
+                {
+                    mail.Display(false);
+                    return true;
+                }
+
+                return false;
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(item);
+            }
+        });
+
+    /// <summary>
+    /// Whether the mailbox (its display name is the SMTP address for these stores)
+    /// is in To, in CC, or not named. Only the first 200 recipients are checked.
+    /// </summary>
+    private static RecipientRole RoleOf(OL.MailItem mail, string mailbox)
+    {
+        if (!mailbox.Contains('@'))
+        {
+            return RecipientRole.Unknown;
+        }
+
+        var recipients = mail.Recipients;
+        try
+        {
+            var inCopy = false;
+            var count = Math.Min(recipients.Count, 200);
+            for (var i = 1; i <= count; i++)
+            {
+                var recipient = recipients[i];
+                try
+                {
+                    if (!string.Equals(RecipientSmtp(recipient), mailbox, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    if (recipient.Type == (int)OL.OlMailRecipientType.olTo)
+                    {
+                        return RecipientRole.Direct;
+                    }
+
+                    inCopy |= recipient.Type == (int)OL.OlMailRecipientType.olCC;
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(recipient);
+                }
+            }
+
+            return inCopy ? RecipientRole.Copy : RecipientRole.NotNamed;
+        }
+        catch (COMException)
+        {
+            return RecipientRole.Unknown;
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(recipients);
+        }
+    }
+
+    private static string RecipientSmtp(OL.Recipient recipient)
+    {
+        try
+        {
+            return recipient.PropertyAccessor.GetProperty(SmtpAddressProperty) as string ?? recipient.Address ?? "";
+        }
+        catch (COMException)
+        {
+            return recipient.Address ?? "";
+        }
+    }
 
     public void Dispose()
     {

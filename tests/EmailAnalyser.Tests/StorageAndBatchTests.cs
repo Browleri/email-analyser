@@ -189,7 +189,7 @@ public class BatchRunnerTests
         Assert.Equal(1, env.Store.CountByStatus()["gone"]);
     }
 
-    private sealed class Env : IDisposable
+    internal sealed class Env : IDisposable
     {
         private readonly TempDir _dir = new();
 
@@ -215,11 +215,13 @@ public class BatchRunnerTests
         }
     }
 
-    private sealed class FakeServer : ILanguageModelServer
+    internal sealed class FakeServer : ILanguageModelServer
     {
         public List<LoadedInstance> Loaded { get; } = [];
         public bool Down { get; set; }
         public bool FailChat { get; set; }
+        /// <summary>Called with the 1-based chat number; a returned exception is thrown.</summary>
+        public Func<int, ModelServerException?>? ChatFailure { get; set; }
         public string Answer { get; set; } = GoodAnswer;
         public int Loads { get; private set; }
         public int Unloads { get; private set; }
@@ -242,16 +244,24 @@ public class BatchRunnerTests
             return Task.CompletedTask;
         }
 
+        public string? LastUser { get; private set; }
+
         public Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken ct)
         {
             Chats++;
+            LastUser = request.User;
+            if (ChatFailure?.Invoke(Chats) is { } failure)
+            {
+                throw failure;
+            }
+
             return FailChat
                 ? throw new ModelServerException("LM Studio ei vastannut ajoissa.")
                 : Task.FromResult(new ChatResponse(Answer, "stop", 100, 50, TimeSpan.FromMilliseconds(10)));
         }
     }
 
-    private sealed class FakeGpu : IGpuActivityProbe
+    internal sealed class FakeGpu : IGpuActivityProbe
     {
         private int _calls;
         public bool Generating { get; set; }
@@ -264,13 +274,15 @@ public class BatchRunnerTests
         }
     }
 
-    private sealed class FakeSource : IMessageSource
+    internal sealed class FakeSource : IMessageSource
     {
         public HashSet<string> Gone { get; } = [];
+        public Func<string, string>? BodyFor { get; set; }
 
         public Task<MessageReadResult> ReadAsync(MessageReference reference, string mailbox, CancellationToken ct) =>
             Task.FromResult(Gone.Contains(reference.EntryId)
                 ? MessageReadResult.Gone()
-                : MessageReadResult.Found(new MessageForAssessment(mailbox, "Lähettäjä", "a@example.fi", "Minä", "", DateTimeOffset.UtcNow, "Otsikko", "Runko")));
+                : MessageReadResult.Found(new MessageForAssessment(mailbox, "Lähettäjä", "a@example.fi", "Minä", "", DateTimeOffset.UtcNow,
+                    "Otsikko", BodyFor?.Invoke(reference.EntryId) ?? "Runko")));
     }
 }

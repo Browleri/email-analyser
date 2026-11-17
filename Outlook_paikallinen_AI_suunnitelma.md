@@ -101,7 +101,7 @@ Mallia ei pidetä muistissa. Mallin lataaminen vie LM Studion mittauksissa noin 
 - vanhin jonossa oleva viesti on odottanut 20 minuuttia,
 - käyttäjä painaa "Käsittele nyt".
 
-Raja-arvot ovat säädettäviä. Oletuksilla kiireellinen viesti näkyy arvioituna viimeistään noin 20–25 minuutin kuluttua saapumisesta. Raja-arvot säädetään vaiheessa 4 käytännön kokemuksen mukaan.
+Raja-arvot ovat säädettäviä. Oletuksilla kiireellinen viesti näkyy arvioituna viimeistään noin 20–25 minuutin kuluttua saapumisesta. Raja-arvot säädetään vaiheessa 5 käytännön kokemuksen mukaan.
 
 **Ennen latausta tarkistetaan:**
 1. Automatic1111 ei generoi kuvaa. Tämä luetaan rajapinnasta `http://127.0.0.1:7860/sdapi/v1/progress`; jos rajapinta ei vastaa, Automatic1111:n katsotaan olevan vapaana.
@@ -279,15 +279,50 @@ Rakennetaan WPF-lista, suodatus, avaaminen Outlookissa ja käyttäjän korjaukse
 
 Mitataan erityisesti huomiota vaativien viestien löytyminen ja virheelliset hälytykset. Alustava tavoite on vähintään 95 %:n löytymisosuus arviointiotoksen toimenpiteitä vaativille viesteille, mutta tulos raportoidaan myös lukumäärinä; pieni otos ei takaa vastaavaa laatua jatkossa. Jos aineistossa on liian vähän tällaisia viestejä, otosta kasvatetaan. Ennen luokkien automaatiota käydään läpi jokainen huomiotta jäänyt viesti ja asetetaan hyväksyttävä hälytystaso käytännön kokemuksen mukaan.
 
-### 4. Jatkuva seuranta ja luokat
+Toteutus 17.11.2026:
+
+- **WPF-sovellus** `src/EmailAnalyser.App` (`EmailAnalyser.exe`):
+  - kaikkien laatikoiden yhteinen lista ja suodattimet (vastattava ja tehtävä, kukin toimenpide, merkitsemättömät, huomiotta jääneet, ongelmat ja jono) sekä laatikkosuodatin,
+  - viestin tiedot ja AI-arvio, avaus Outlookissa ja oma merkintä,
+  - tilarivi: jono, viimeisin erä, merkintöjen edistyminen ja laatikkokohtaiset ongelmat.
+  - Pikanäppäimet: Ctrl+S tallentaa, Ctrl+Enter hyväksyy AI-arvion, Ctrl+O avaa viestin ja F5 päivittää. Tallennuksen jälkeen siirrytään seuraavaan merkitsemättömään viestiin.
+- **Sokkomerkintä:** valinnan ollessa päällä AI-arvio piilotetaan, kunnes viesti on merkitty. Näkyvä arvio voi ohjata merkintää, mikä vääristäisi laatumittausta. Jokaiseen merkintään tallennetaan, tehtiinkö se sokkona, ja vertailu raportoidaan erikseen sokkona ja arvio näkyvillä tehdyistä merkinnöistä.
+- **Säätö- ja arviointiosa:** jokainen merkitty viesti kuuluu pysyvästi joko säätöosaan (noin kolmannes) tai arviointiosaan. Jako tehdään viestin tunnisteen tiivisteestä. Kehotetta säädetään vain säätöosan tuloksilla.
+  - `email-analyser labels --split arviointi` raportoi löytymisosuuden, turhat hälytykset, kenttäkohtaisen osuvuuden ja huomiotta jääneiden viestien tunnisteet.
+  - `email-analyser requeue --labeled saato` palauttaa merkityt viestit jonoon uuden kehotteen mittausta varten. Merkinnät säilyvät.
+- **Vastaanottajan rooli:** Outlook-sovitin selvittää, onko laatikon osoite Vastaanottajat- vai Kopio-kentässä vai ei kummassakaan, ja kehote kertoo sen mallille. Tämä korjaa vaiheen 2 kopio-viestin turhan hälytyksen.
+- **Tietokanta:** versio 2 lisää merkintätaulun. Merkintä on oma tietonsa, eikä uusi arvio korvaa sitä.
+
+Kaikki 192 viestiä arvioitiin uudelleen kehotteella `classify-v1-f982a679` 17.11.2026: kaikki arviot olivat kelvollisia, ja huomiota vaati 67 (vastattava 42, tehtävä 25). Lisäksi 2 viestiä oli tarkistettavia. Synteettisessä aineistossa (35 tapausta, joista 6 hyökkäyksiä) huomiota vaativat löytyivät 15/15, eikä turhia hälytyksiä ollut. Tämä ei ole riippumaton mittaus, koska kehotetta on säädetty samalla aineistolla.
+
+Jäljellä: käyttäjä merkitsee otoksen näkymässä, minkä jälkeen löytymisosuus ja turhat hälytykset mitataan arviointiosasta. Jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
+
+### 4. Tietoturvan arviointi
+
+Sähköpostin sisältö on hyökkääjän hallitsemaa syötettä, ja se kulkee kielimallin kautta käyttäjän näkymään ja myöhemmin Outlook-luokkiin. Ennen kuin sovellus kirjoittaa Outlookiin tai otetaan jatkuvaan käyttöön, riskit arvioidaan järjestelmällisesti ja toteutus käydään läpi niiden kannalta. Arvio on tiedostossa [docs/tietoturva-arvio.md](docs/tietoturva-arvio.md). Siinä ovat suojattavat kohteet, tietovirrat ja luottamusrajat, hyökkääjät, riskirekisteri (R1–R29) todennäköisyyksineen ja vaikutuksineen, toteutuksesta löydetyt puutteet (F1–F10) sekä avoimet toimenpiteet.
+
+Tila 17.11.2026: arvio on tehty, ja puutteet F1–F10 on korjattu ja testattu. Hyökkäystesti paljasti, että malli totteli väärennettyä erotinta ja roolileikkiä. Siksi ohjelma pakottaa nyt toimenpiteeksi "tarkista" aina, kun viestissä havaitaan ohjailuyritys (F10). Korjauksen jälkeen kaikki kuusi hyökkäystapausta päätyivät tarkistettaviksi, eikä 192 oikeasta viestistä yksikään osunut heuristiikkaan. Sovelluksen ulkopuoliset riskit R13–R16 odottavat käyttäjän päätöstä, ja vaiheen 5 kirjoitusvaatimukset ovat arvion kohdassa "Avoimet toimenpiteet".
+
+Hyväksytty, kun:
+- uhkamalli ja riskirekisteri kattavat ainakin kehoteinjektion, luottamuksellisuuden, saatavuuden, eheyden, toimitusketjun ja kehitysprosessin,
+- toteutuksesta löydetyt puutteet on korjattu ja testattu, tai kirjattu avoimiksi omistajineen,
+- testiaineistossa on hyökkäystapauksia, ja niiden tulokset on raportoitu,
+- sovellusta koskevat korkeat riskit on alennettu vähintään kohtalaisiksi, ja sovelluksen ulkopuoliset korkeat riskit on viety käyttäjän päätettäviksi,
+- vaiheen 5 kirjoituksille on kirjattu tietoturvavaatimukset.
+
+Arvio päivitetään ennen vaiheen 5 Outlook-kirjoituksia, ennen käyttöönottoa ja aina, kun sovellukseen lisätään verkkoyhteys, työkaluja tai kirjoitusoikeus. Mallille ei anneta työkaluja ilman uutta arviota.
+
+### 5. Jatkuva seuranta ja luokat
 
 Lisätään kahden minuutin tarkistus, eräajon käynnistysehdot, keskeytys/jatkaminen, kiinniotto, rajatut uudelleenyritykset ja valinnainen M365-luokkien kirjoitus. Gmail näkyy samassa listassa paikallisin luokin. Luokkamuutoksista säilytetään palautukseen tarvittava historia; palautus poistaa vain sovelluksen omat muutokset huomioiden myöhemmät käyttäjämuutokset.
 
-Hyväksytty, kun lepotila, Outlookin sulkeminen ja uudelleenkäynnistys, verkkokatko, LM Studion uudelleenkäynnistys, kansiosiirto ja vain luku -kansio eivät hukkaa käsittelytilaa tai aiheuta toistuvia muutoksia. Viestien avaus tai arviointi ei merkitse niitä luetuiksi. Kuvagenerointi ei hidastu sovelluksen takia. Käyttöönoton jälkeen seurataan noin viikon ajan käytännön toimivuutta, eräviivettä ja lykkäysten määrää ja säädetään erän raja-arvot.
+Hyväksytty, kun lepotila, Outlookin sulkeminen ja uudelleenkäynnistys, verkkokatko, LM Studion uudelleenkäynnistys, kansiosiirto ja vain luku -kansio eivät hukkaa käsittelytilaa tai aiheuta toistuvia muutoksia. Viestien avaus tai arviointi ei merkitse niitä luetuiksi. Kuvagenerointi ei hidastu sovelluksen takia. Tietoturva-arvion kohdan "Avoimet toimenpiteet" vaiheen 5 vaatimukset on toteutettu ja testattu: kiinteä luokkataulukko, kohteen tarkistus, ohjailuyrityksen rajaus, palvelimen tunnistus, otsakkeista johdettu huijausmerkki ja säilytysaika. Käyttöönoton jälkeen seurataan noin viikon ajan käytännön toimivuutta, eräviivettä ja lykkäysten määrää ja säädetään erän raja-arvot.
 
-### 5. Käyttöönotto
+### 6. Käyttöönotto
 
 Paketoidaan käyttäjäkohtainen Windows-sovellus ja ohjeet. Sovellus ajetaan käyttäjänä `kortt` ilman järjestelmänvalvojan oikeuksia. Käynnistys kirjautuessa on valinnainen ja toimii vain kirjautuneen käyttäjän istunnossa. Sovellusta ei ajeta tilillä `Martti-local`, ei käynnistetä järjestelmän käynnistyessä, ei asenneta Windows-palveluksi eikä asenneta GitHub Actions -runnerin kautta. Ohjelma odottaa Outlookia, jos se ei ole käynnissä; suljettua Outlookia ei avata huomaamatta. Jos LM Studio ei vastaa, työt jäävät jonoon ja tila näytetään käyttöliittymässä. Asennustapa ja Office-yhteensopivuus varmistetaan oikealla koneella.
+
+Ennen käyttöönottoa tietoturva-arvio päivitetään, ja käyttäjän päätettävät riskit (Codex-hiekkalaatikon lukuoikeus, runnerin tili, levyn salaus, LM Studion API-avain) on ratkaistu tai hyväksytty tietoisesti.
 
 Käyttöönoton yhteydessä sovellus dokumentoidaan documentation-repoon sen AGENTS.md-ohjeiden mukaan: ensin projektisivu `projects/`-kansioon ja vakiintuneena palvelusivu. Samalla päivitetään koti-pc- ja LM Studio -sivujen kuluttajatiedot sekä varmuuskopiointipäätös.
 

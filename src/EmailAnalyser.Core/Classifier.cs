@@ -62,7 +62,23 @@ public sealed class Classifier(ILanguageModelServer server, PromptTemplate promp
                 : AssessmentValidator.Validate(response.Content, prepared.Truncated);
             if (validation.IsValid)
             {
-                return new ClassificationOutcome(validation.Assessment, [], prepared, attempt, promptTokens, completionTokens, duration);
+                var assessment = validation.Assessment!;
+                if (InjectionHeuristics.Detect(message.Subject + "\n" + message.Body))
+                {
+                    // A message that addresses the classifier does not get the classifier's
+                    // judgement: the action is forced to review regardless of the model's answer.
+                    var note = $"Ohjelma: viestissä on tekoälylle osoitettua tekstiä, joten toimenpide on tarkista (mallin ehdotus: {assessment.Action}). ";
+                    var rationale = note + assessment.Rationale;
+                    assessment = assessment with
+                    {
+                        Action = "tarkista",
+                        Rationale = rationale.Length > AssessmentValidator.MaxRationaleChars ? rationale[..AssessmentValidator.MaxRationaleChars] : rationale,
+                        NeedsReview = true,
+                        ReviewReasons = [.. assessment.ReviewReasons, InjectionHeuristics.ReviewReason],
+                    };
+                }
+
+                return new ClassificationOutcome(assessment, [], prepared, attempt, promptTokens, completionTokens, duration);
             }
 
             errors = validation.Errors;

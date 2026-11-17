@@ -20,7 +20,17 @@ public sealed record MessageForAssessment(
     string Cc,
     DateTimeOffset Received,
     string Subject,
-    string Body);
+    string Body,
+    RecipientRole Role = RecipientRole.Unknown);
+
+/// <summary>Whether the mailbox owner is a direct recipient, only in copy, or not named.</summary>
+public enum RecipientRole
+{
+    Unknown,
+    Direct,
+    Copy,
+    NotNamed,
+}
 
 public enum ReadStatus
 {

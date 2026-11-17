@@ -140,7 +140,8 @@ public static class AssessmentValidator
             return null;
         }
 
-        var text = value.GetString()!.Trim();
+        // Model output is untrusted: strip invisible/bidi characters and reduce links to their host.
+        var text = SafeText.ModelText(value.GetString()!).Trim();
         if (text.Length > max)
         {
             errors.Add($"{name} on liian pitkä ({text.Length} merkkiä)");

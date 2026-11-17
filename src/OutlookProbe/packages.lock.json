@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0-windows7.0": {
+      "Microsoft.Office.Interop.Outlook": {
+        "type": "Direct",
+        "requested": "[15.0.4797.1004, )",
+        "resolved": "15.0.4797.1004",
+        "contentHash": "17tdFXg/TGnbmSC9YNkIrB6P3vTSemOMI/TaUaZWQmRE1dMjHIVmBPffQhXasH/te4weHiFk8EEXUCi/NsGbuA=="
+      }
+    }
+  }
+}

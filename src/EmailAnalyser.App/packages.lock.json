@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0-windows7.0": {
+      "Microsoft.Data.Sqlite.Core": {
+        "type": "Transitive",
+        "resolved": "10.0.15",
+        "contentHash": "mjDz/zleAF78J1KRN9FludN2bzbsMWoXYSLVcawADle7RBhZYpFZYivGRvbvlH/RtXT/gjO0yhG99tzdFiET+A==",
+        "dependencies": {
+          "SQLitePCLRaw.core": "2.1.13"
+        }
+      },
+      "Microsoft.Office.Interop.Outlook": {
+        "type": "Transitive",
+        "resolved": "15.0.4797.1004",
+        "contentHash": "17tdFXg/TGnbmSC9YNkIrB6P3vTSemOMI/TaUaZWQmRE1dMjHIVmBPffQhXasH/te4weHiFk8EEXUCi/NsGbuA=="
+      },
+      "SQLitePCLRaw.bundle_e_sqlite3mc": {
+        "type": "Transitive",
+        "resolved": "2.1.11",
+        "contentHash": "gHV54qtGLG8DRbOGUeK/rZHlBIWPMLi73lLuvC6csFpMvoLyEHlwc+FlpAdJg1X2+VZRPw/PC/2/nOWm1SUtHQ==",
+        "dependencies": {
+          "SQLitePCLRaw.lib.e_sqlite3mc": "2.1.11",
+          "SQLitePCLRaw.provider.e_sqlite3mc": "2.1.11"
+        }
+      },
+      "SQLitePCLRaw.core": {
+        "type": "Transitive",
+        "resolved": "2.1.13",
+        "contentHash": "2joofoinuHBFs0nMX3nKuXgxpXryRkCOdM2Ua6HBqQLLy6IW+5f28ZI+HAvMyF8vG7XfNz/lwfBfE6V4juru8Q=="
+      },
+      "SQLitePCLRaw.lib.e_sqlite3mc": {
+        "type": "Transitive",
+        "resolved": "2.1.11",
+        "contentHash": "z7vGnW2SeVC3az+gBWFHM16gnKed8/p91WCyCe9Al2BtY3mnGJ+dk4rUzW5zm/Kz7fM7lXhUhRI6Nexm1PAVAg=="
+      },
+      "SQLitePCLRaw.provider.e_sqlite3mc": {
+        "type": "Transitive",
+        "resolved": "2.1.11",
+        "contentHash": "v0Y7yjzDwLsoM922PReXZcAAZJ2ekZaorulQB5yhXzEHkXCHcLJ/Rcd8NPESBrS/PMxgaKtJ1BjQkorRJH7AEA==",
+        "dependencies": {
+          "SQLitePCLRaw.core": "2.1.11"
+        }
+      },
+      "emailanalyser.core": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Data.Sqlite.Core": "[10.0.15, )",
+          "SQLitePCLRaw.bundle_e_sqlite3mc": "[2.1.11, )"
+        }
+      },
+      "emailanalyser.outlook": {
+        "type": "Project",
+        "dependencies": {
+          "EmailAnalyser.Core": "[1.0.0, )",
+          "Microsoft.Office.Interop.Outlook": "[15.0.4797.1004, )"
+        }
+      }
+    }
+  }
+}

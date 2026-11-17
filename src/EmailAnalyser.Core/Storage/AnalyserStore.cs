@@ -8,6 +8,37 @@ namespace EmailAnalyser.Core.Storage;
 
 public sealed record QueuedMessage(long Id, MessageReference Reference, string Mailbox, DateTimeOffset Received);
 
+/// <summary>The user's own judgement of a message: ground truth for quality measurement.</summary>
+public sealed record UserLabel(string Action, string Urgency, string Topic, DateOnly? Deadline, bool AgreesWithAi = false, string Split = "", bool Blind = false, DateTimeOffset LabeledAt = default);
+
+/// <summary>A message with its latest assessment and the user's label, for the review view.</summary>
+public sealed record ReviewItem(
+    long MessageId,
+    MessageReference Reference,
+    string Mailbox,
+    string? SenderName,
+    string? SenderAddress,
+    string? Subject,
+    DateTimeOffset Received,
+    string Status,
+    string? LastError,
+    long? AssessmentId,
+    Assessment? Assessment,
+    bool Truncated,
+    string? Model,
+    string? PromptVersion,
+    UserLabel? Label);
+
+public static class LabelSplit
+{
+    public const string Tuning = "saato";
+    public const string Holdout = "arviointi";
+
+    /// <summary>Stable assignment: about one third tuning, two thirds holdout.</summary>
+    public static string For(MessageReference reference) =>
+        SHA256.HashData(Encoding.UTF8.GetBytes(reference.StoreId + "|" + reference.EntryId))[0] % 3 == 0 ? Tuning : Holdout;
+}
+
 public sealed record BatchSummary(
     long Id, DateTimeOffset Started, DateTimeOffset? Ended, string? Model, string Outcome, string? Reason,
     double? LoadSeconds, int? GpuBefore, int? GpuLoaded, int? GpuAfter, int Assessed, int Invalid, bool Unloaded);
@@ -37,7 +68,8 @@ public sealed record AssessmentReport(
 /// </summary>
 public sealed class AnalyserStore : IDisposable
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
+    public const int MaxMessageAttempts = 3;
     private readonly SqliteConnection _db;
 
     private AnalyserStore(SqliteConnection connection) => _db = connection;
@@ -216,6 +248,140 @@ public sealed class AnalyserStore : IDisposable
         cmd.Parameters.AddWithValue("$id", message.Id);
         cmd.ExecuteNonQuery();
     }
+
+    /// <summary>
+    /// Counts a failed attempt against the message. It is failed for good when
+    /// <paramref name="failNow"/> or after <see cref="MaxMessageAttempts"/> attempts;
+    /// otherwise it stays queued.
+    /// </summary>
+    public void RecordFailure(QueuedMessage message, string reason, bool failNow, DateTimeOffset now)
+    {
+        using var cmd = Command("""
+            UPDATE messages SET attempts = attempts + 1, last_error = $reason, updated_utc = $now,
+                status = CASE WHEN $failNow = 1 OR attempts + 1 >= $max THEN 'failed' ELSE status END
+            WHERE id = $id
+            """);
+        cmd.Parameters.AddWithValue("$reason", reason);
+        cmd.Parameters.AddWithValue("$now", Utc(now));
+        cmd.Parameters.AddWithValue("$failNow", failNow ? 1 : 0);
+        cmd.Parameters.AddWithValue("$max", MaxMessageAttempts);
+        cmd.Parameters.AddWithValue("$id", message.Id);
+        cmd.ExecuteNonQuery();
+    }
+
+    // --- review and labels ---------------------------------------------------------------------
+
+    public IReadOnlyList<ReviewItem> GetReviewItems()
+    {
+        using var cmd = Command("""
+            SELECT m.id, m.store_id, m.entry_id, m.mailbox, m.sender_name, m.sender_address, m.subject, m.received_utc,
+                   m.status, m.last_error,
+                   a.id, a.valid, a.summary, a.rationale, a.topic, a.action, a.urgency, a.deadline, a.needs_review,
+                   a.review_reasons, a.truncated, a.model, a.prompt_version,
+                   l.action, l.urgency, l.topic, l.deadline, l.agrees_with_ai, l.split, l.blind, l.labeled_utc
+            FROM messages m
+            LEFT JOIN (SELECT message_id, max(id) AS id FROM assessments GROUP BY message_id) la ON la.message_id = m.id
+            LEFT JOIN assessments a ON a.id = la.id
+            LEFT JOIN labels l ON l.message_id = m.id
+            ORDER BY m.received_utc DESC
+            """);
+        using var r = cmd.ExecuteReader();
+        var result = new List<ReviewItem>();
+        while (r.Read())
+        {
+            Assessment? assessment = null;
+            if (!r.IsDBNull(10) && r.GetInt32(11) == 1)
+            {
+                assessment = new Assessment(
+                    r.GetString(12), r.GetString(13), r.GetString(14), r.GetString(15), r.GetString(16),
+                    r.IsDBNull(17) ? null : DateOnly.ParseExact(r.GetString(17), "yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    r.GetInt32(18) == 1,
+                    JsonSerializer.Deserialize<string[]>(r.GetString(19)) ?? []);
+            }
+
+            UserLabel? label = r.IsDBNull(23) ? null : new UserLabel(
+                r.GetString(23), r.GetString(24), r.GetString(25),
+                r.IsDBNull(26) ? null : DateOnly.ParseExact(r.GetString(26), "yyyy-MM-dd", CultureInfo.InvariantCulture),
+                r.GetInt32(27) == 1, r.GetString(28), r.GetInt32(29) == 1, ParseUtc(r.GetString(30)));
+
+            result.Add(new ReviewItem(
+                r.GetInt64(0), new MessageReference(r.GetString(1), r.GetString(2)), r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5), r.IsDBNull(6) ? null : r.GetString(6),
+                ParseUtc(r.GetString(7)), r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9),
+                r.IsDBNull(10) ? null : r.GetInt64(10), assessment, !r.IsDBNull(20) && r.GetInt32(20) == 1,
+                r.IsDBNull(21) ? null : r.GetString(21), r.IsDBNull(22) ? null : r.GetString(22), label));
+        }
+
+        return result;
+    }
+
+    /// <summary>Saves or replaces the user's label. Returns the stored label with split and agreement.</summary>
+    public UserLabel SaveLabel(ReviewItem item, UserLabel label, bool blind, DateTimeOffset now)
+    {
+        if (!Labels.Actions.Contains(label.Action) || !Labels.Urgencies.Contains(label.Urgency) || !Labels.Topics.Contains(label.Topic))
+        {
+            throw new ArgumentException("Merkinnässä on sallimaton arvo.");
+        }
+
+        var a = item.Assessment;
+        var agrees = a is not null && a.Action == label.Action && a.Urgency == label.Urgency &&
+                     a.Topic == label.Topic && a.Deadline == label.Deadline;
+        var stored = label with { AgreesWithAi = agrees, Split = LabelSplit.For(item.Reference), Blind = blind, LabeledAt = now };
+        using var cmd = Command("""
+            INSERT INTO labels (message_id, action, urgency, topic, deadline, agrees_with_ai, assessment_id, split, blind, labeled_utc)
+            VALUES ($id, $action, $urgency, $topic, $deadline, $agrees, $assessment, $split, $blind, $now)
+            ON CONFLICT (message_id) DO UPDATE SET action = excluded.action, urgency = excluded.urgency, topic = excluded.topic,
+                deadline = excluded.deadline, agrees_with_ai = excluded.agrees_with_ai, assessment_id = excluded.assessment_id,
+                blind = excluded.blind, labeled_utc = excluded.labeled_utc
+            """);
+        cmd.Parameters.AddWithValue("$id", item.MessageId);
+        cmd.Parameters.AddWithValue("$action", stored.Action);
+        cmd.Parameters.AddWithValue("$urgency", stored.Urgency);
+        cmd.Parameters.AddWithValue("$topic", stored.Topic);
+        cmd.Parameters.AddWithValue("$deadline", (object?)stored.Deadline?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$agrees", agrees ? 1 : 0);
+        cmd.Parameters.AddWithValue("$assessment", (object?)item.AssessmentId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$split", stored.Split);
+        cmd.Parameters.AddWithValue("$blind", blind ? 1 : 0);
+        cmd.Parameters.AddWithValue("$now", Utc(now));
+        cmd.ExecuteNonQuery();
+        return stored;
+    }
+
+    public void DeleteLabel(long messageId)
+    {
+        using var cmd = Command("DELETE FROM labels WHERE message_id = $id");
+        cmd.Parameters.AddWithValue("$id", messageId);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Queues labelled messages again, e.g. to measure a new prompt. Labels are kept.</summary>
+    public int RequeueLabeled(string? split, DateTimeOffset now)
+    {
+        using var cmd = Command("""
+            UPDATE messages SET status = 'queued', attempts = 0, last_error = NULL, updated_utc = $now
+            WHERE id IN (SELECT message_id FROM labels WHERE $split IS NULL OR split = $split)
+              AND status IN ('assessed', 'invalid', 'failed')
+            """);
+        cmd.Parameters.AddWithValue("$split", (object?)split ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$now", Utc(now));
+        return cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Queues every processed message again, e.g. after a prompt change. Labels and old assessments are kept.</summary>
+    public int RequeueAll(DateTimeOffset now)
+    {
+        using var cmd = Command("""
+            UPDATE messages SET status = 'queued', attempts = 0, last_error = NULL, updated_utc = $now
+            WHERE status IN ('assessed', 'invalid', 'failed')
+            """);
+        cmd.Parameters.AddWithValue("$now", Utc(now));
+        return cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Per-mailbox counts of messages that could not be assessed.</summary>
+    public IReadOnlyDictionary<string, int> ProblemsByMailbox() =>
+        CountBy("SELECT mailbox, count(*) FROM messages WHERE status IN ('gone', 'unreadable', 'invalid', 'failed') GROUP BY mailbox");
 
     public static string ContentHash(MessageForAssessment message) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(message.Subject + "\n" + message.Body)))[..32];
@@ -461,6 +627,28 @@ public sealed class AnalyserStore : IDisposable
                 );
                 CREATE INDEX ix_assessments_message ON assessments (message_id);
                 PRAGMA user_version = 1;
+                """, tx);
+            cmd.ExecuteNonQuery();
+            tx.Commit();
+        }
+
+        if (version < 2)
+        {
+            using var tx = _db.BeginTransaction();
+            using var cmd = Command("""
+                CREATE TABLE labels (
+                    message_id INTEGER PRIMARY KEY REFERENCES messages (id) ON DELETE CASCADE,
+                    action TEXT NOT NULL,
+                    urgency TEXT NOT NULL,
+                    topic TEXT NOT NULL,
+                    deadline TEXT,
+                    agrees_with_ai INTEGER NOT NULL,
+                    assessment_id INTEGER REFERENCES assessments (id),
+                    split TEXT NOT NULL,
+                    blind INTEGER NOT NULL,
+                    labeled_utc TEXT NOT NULL
+                );
+                PRAGMA user_version = 2;
                 """, tx);
             cmd.ExecuteNonQuery();
             tx.Commit();

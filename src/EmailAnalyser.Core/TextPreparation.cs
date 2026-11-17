@@ -21,13 +21,17 @@ public static partial class TextPreparation
     // otherwise the message is a bare forward and the "history" is the content.
     private const int MinOwnTextChars = 40;
 
+    /// <summary>Raw input beyond this is dropped before any processing (memory and time bound).</summary>
+    public const int MaxRawChars = 100_000;
+
     public static PreparedText Prepare(string? body, int maxChars = DefaultMaxChars)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxChars, 200);
         var original = body ?? "";
-        var text = Normalise(original);
+        var preTruncated = original.Length > MaxRawChars;
+        var text = Normalise(preTruncated ? original[..MaxRawChars] : original);
         text = text.Replace("<<<", "‹‹‹", StringComparison.Ordinal).Replace(">>>", "›››", StringComparison.Ordinal);
-        text = UrlPattern().Replace(text, m => DescribeLink(m.Value));
+        text = ReplaceSafely(text, UrlPattern(), m => DescribeLink(m.Value));
 
         var historyShortened = false;
         var historyStart = FindReplyHistory(text);
@@ -48,7 +52,7 @@ public static partial class TextPreparation
         text = RemoveQuotedLines(text);
         text = CollapseWhitespace(text);
 
-        var truncated = false;
+        var truncated = preTruncated;
         if (text.Length > maxChars)
         {
             text = CutAtBoundary(text, maxChars - TruncationMarker.Length - 2) + "\n" + TruncationMarker;
@@ -63,20 +67,33 @@ public static partial class TextPreparation
         var sb = new StringBuilder(text.Length);
         foreach (var c in text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n'))
         {
-            switch (c)
+            if (c is '\n')
             {
-                case ' ':
-                    sb.Append(' ');
-                    break;
-                case '​' or '‌' or '‍' or '﻿' or '­':
-                    break;
-                default:
-                    sb.Append(c);
-                    break;
+                sb.Append(c);
+            }
+            else if (c is ' ' or '\t')
+            {
+                sb.Append(' ');
+            }
+            else if (!SafeText.IsInvisibleOrControl(c))
+            {
+                sb.Append(c);
             }
         }
 
         return sb.ToString();
+    }
+
+    private static string ReplaceSafely(string text, Regex pattern, MatchEvaluator evaluator)
+    {
+        try
+        {
+            return pattern.Replace(text, evaluator);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return text;
+        }
     }
 
     private static string DescribeLink(string url) =>
@@ -85,6 +102,18 @@ public static partial class TextPreparation
             : "[linkki]";
 
     private static int FindReplyHistory(string text)
+    {
+        try
+        {
+            return FindReplyHistoryCore(text);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return -1;
+        }
+    }
+
+    private static int FindReplyHistoryCore(string text)
     {
         var best = -1;
         foreach (var pattern in new[] { SeparatorLine(), WroteLine(), UnderscoreLine() })
@@ -115,8 +144,8 @@ public static partial class TextPreparation
 
     private static string CollapseWhitespace(string text)
     {
-        var lines = text.Split('\n').Select(line => InlineWhitespace().Replace(line, " ").TrimEnd());
-        return BlankLines().Replace(string.Join('\n', lines), "\n\n").Trim();
+        var lines = text.Split('\n').Select(line => ReplaceSafely(line, InlineWhitespace(), _ => " ").TrimEnd());
+        return ReplaceSafely(string.Join('\n', lines), BlankLines(), _ => "\n\n").Trim();
     }
 
     /// <summary>Cuts at the last paragraph, sentence or word boundary before <paramref name="max"/>.</summary>
@@ -141,27 +170,27 @@ public static partial class TextPreparation
         return window.TrimEnd();
     }
 
-    [GeneratedRegex(@"https?://[^\s<>""'\])]+", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"https?://[^\s<>""'\])]+", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
     private static partial Regex UrlPattern();
 
-    [GeneratedRegex(@"^-{2,}\s*(Original Message|Alkuperäinen viesti|Forwarded message|Välitetty viesti|Ursprungligt meddelande)\s*-{2,}", RegexOptions.IgnoreCase | RegexOptions.Multiline)]
+    [GeneratedRegex(@"^-{2,}\s*(Original Message|Alkuperäinen viesti|Forwarded message|Välitetty viesti|Ursprungligt meddelande)\s*-{2,}", RegexOptions.IgnoreCase | RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex SeparatorLine();
 
-    [GeneratedRegex(@"^(On .{5,200} wrote:|.{5,200} kirjoitti:)\s*$", RegexOptions.Multiline)]
+    [GeneratedRegex(@"^(On .{5,200} wrote:|.{5,200} kirjoitti:)\s*$", RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex WroteLine();
 
-    [GeneratedRegex(@"^_{20,}\s*$", RegexOptions.Multiline)]
+    [GeneratedRegex(@"^_{20,}\s*$", RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex UnderscoreLine();
 
-    [GeneratedRegex(@"^\s*(From|Lähettäjä|Från):[^\n]*\n", RegexOptions.Multiline)]
+    [GeneratedRegex(@"^\s*(From|Lähettäjä|Från):[^\n]*\n", RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex HeaderFromLine();
 
-    [GeneratedRegex(@"^\s*(Sent|Lähetetty|Skickat|Date|Päivämäärä):", RegexOptions.Multiline)]
+    [GeneratedRegex(@"^\s*(Sent|Lähetetty|Skickat|Date|Päivämäärä):", RegexOptions.Multiline, matchTimeoutMilliseconds: 1000)]
     private static partial Regex HeaderSentLine();
 
-    [GeneratedRegex(@"[ \t]+")]
+    [GeneratedRegex(@"[ \t]+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex InlineWhitespace();
 
-    [GeneratedRegex(@"\n{3,}")]
+    [GeneratedRegex(@"\n{3,}", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex BlankLines();
 }
