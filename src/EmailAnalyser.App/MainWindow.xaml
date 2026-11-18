@@ -1,8 +1,9 @@
-﻿<Window x:Class="EmailAnalyser.App.MainWindow"
+<Window x:Class="EmailAnalyser.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:EmailAnalyser.App"
-        Title="Sähköpostiavustaja" Height="820" Width="1450" MinWidth="900" MinHeight="500">
+        Title="{Binding WindowTitle}" Height="820" Width="1450" MinWidth="900" MinHeight="560"
+        Background="{StaticResource BarkWhite}" Foreground="{StaticResource Ink}" FontFamily="Segoe UI" FontSize="13">
     <Window.InputBindings>
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
         <KeyBinding Key="Enter" Modifiers="Control" Command="{Binding AcceptAiCommand}" />
@@ -10,186 +11,259 @@
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
     </Window.InputBindings>
 
-    <DockPanel>
-        <!-- View controls only; monitoring controls are on the monitor line at the bottom. -->
-        <Border DockPanel.Dock="Top" Padding="8,6" Background="#F3F3F3" BorderBrush="#DDD" BorderThickness="0,0,0,1">
+    <DockPanel Background="{StaticResource BarkWhite}">
+        <!-- Title band in bark black, with a birch-bark stripe below. -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource BarkBlack}" Padding="14,9">
+            <DockPanel>
+                <Border DockPanel.Dock="Right" Background="{StaticResource Cloudberry}" CornerRadius="3" Padding="8,2" VerticalAlignment="Center"
+                        Visibility="{Binding Masked, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="Peitetty näkymä: viestien tekstit on korvattu" Foreground="{StaticResource Ink}" FontSize="12" />
+                </Border>
+                <Grid Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
+                    <Path Fill="{StaticResource LeafBright}" Data="M9,1 C4,5 3.5,10 9,17 C14.5,10 14,5 9,1 Z" />
+                    <Path Stroke="{StaticResource BarkBlack}" StrokeThickness="1" Data="M9,4 L9,16" />
+                </Grid>
+                <TextBlock Text="Sähköpostiavustaja" Foreground="{StaticResource BarkWhite}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="paikallinen tekoäly: viestit eivät lähde koneelta" Foreground="{StaticResource OnDarkMuted}" FontSize="12"
+                           Margin="14,1,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+        </Border>
+        <Rectangle DockPanel.Dock="Top" Height="8" Fill="{StaticResource BirchBark}" />
+
+        <!-- View controls; monitoring controls are on the monitor line at the bottom. -->
+        <Border DockPanel.Dock="Top" Padding="12,4,12,6" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1">
             <WrapPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,2,16,2">
-                    <TextBlock Text="Näytä:" VerticalAlignment="Center" Margin="0,0,6,0" />
-                    <ComboBox Width="220" ItemsSource="{Binding FilterOptions}" DisplayMemberPath="Text" SelectedValuePath="Key"
+                <StackPanel Orientation="Horizontal" Margin="0,3,18,3">
+                    <TextBlock Text="Näytä" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <ComboBox Width="230" ItemsSource="{Binding FilterOptions}" DisplayMemberPath="Text" SelectedValuePath="Key"
                               SelectedValue="{Binding Filter}" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,2,16,2">
-                    <TextBlock Text="Laatikko:" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <StackPanel Orientation="Horizontal" Margin="0,3,18,3">
+                    <TextBlock Text="Laatikko" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <ComboBox Width="240" ItemsSource="{Binding Mailboxes}" SelectedItem="{Binding Mailbox}" />
                 </StackPanel>
-                <CheckBox Content="Sokkomerkintä (piilota AI-arvio, kunnes merkitty)" IsChecked="{Binding BlindMode}"
-                          VerticalAlignment="Center" Margin="0,2,16,2" />
-                <StackPanel Orientation="Horizontal" Margin="0,2,0,2">
-                    <Button Content="Päivitä (F5)" Command="{Binding RefreshCommand}" Padding="10,2" />
-                    <TextBlock Text="{Binding NewResultsHint}" Foreground="#0B5CAD" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0" />
+                <CheckBox IsChecked="{Binding BlindMode}" VerticalAlignment="Center" Margin="0,3,18,3"
+                          ToolTip="Piilottaa AI-arvion, kunnes olet merkinnyt viestin, jotta arvio ei ohjaa merkintää. Ohjelman varoitukset näkyvät silti.">
+                    <TextBlock Text="Sokkomerkintä" />
+                </CheckBox>
+                <StackPanel Orientation="Horizontal" Margin="0,3,0,3">
+                    <Button Content="Päivitä (F5)" Command="{Binding RefreshCommand}" />
+                    <TextBlock Text="{Binding NewResultsHint}" Foreground="{StaticResource Lake}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0" />
                 </StackPanel>
             </WrapPanel>
         </Border>
 
         <!-- Live monitoring state and its controls. -->
-        <Border DockPanel.Dock="Bottom" Padding="8,3" BorderBrush="#DDD" BorderThickness="0,1,0,0">
+        <Border DockPanel.Dock="Bottom" Padding="12,5" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0">
             <Border.Style>
                 <Style TargetType="Border">
-                    <Setter Property="Background" Value="#F7F7F7" />
+                    <Setter Property="Background" Value="{StaticResource Pale}" />
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding MonitorAttention}" Value="True">
-                            <Setter Property="Background" Value="#FFF4E5" />
+                            <Setter Property="Background" Value="{StaticResource CloudberryPale}" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </Border.Style>
             <DockPanel>
-                <Button DockPanel.Dock="Right" Content="{Binding PauseButtonText}" Command="{Binding TogglePauseCommand}" Margin="6,0,0,0" Padding="10,1"
+                <Button DockPanel.Dock="Right" Content="{Binding PauseButtonText}" Command="{Binding TogglePauseCommand}" Margin="8,0,0,0" Padding="12,2"
                         ToolTip="Keskeyttää haun ja eräajon; käynnissä oleva erä pysäytetään ja malli puretaan" />
-                <Button DockPanel.Dock="Right" Content="Käsittele nyt" Command="{Binding ProcessNowCommand}" Margin="6,0,0,0" Padding="10,1"
+                <Button DockPanel.Dock="Right" Content="Käsittele nyt" Command="{Binding ProcessNowCommand}" Margin="8,0,0,0" Padding="12,2"
                         ToolTip="Hae uudet viestit ja käsittele jono heti, jos näytönohjain on vapaa" />
                 <TextBlock Text="{Binding StatusMonitor}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusMonitor}" />
             </DockPanel>
         </Border>
 
         <!-- The list as of the last refresh. -->
-        <StatusBar DockPanel.Dock="Bottom">
+        <StatusBar DockPanel.Dock="Bottom" Background="{StaticResource BarkWhite}" Padding="6,1">
             <StatusBarItem Content="{Binding StatusList}" />
-            <Separator />
+            <Separator Background="{StaticResource Line}" />
             <StatusBarItem Content="{Binding StatusLabels}" />
-            <Separator />
+            <Separator Background="{StaticResource Line}" />
             <StatusBarItem Content="{Binding StatusProblems}" />
         </StatusBar>
 
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="400" />
-                <ColumnDefinition Width="5" />
-                <ColumnDefinition Width="420" MinWidth="300" />
+                <ColumnDefinition Width="7*" MinWidth="460" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="3*" MinWidth="320" />
             </Grid.ColumnDefinitions>
 
-            <DataGrid Grid.Column="0" ItemsSource="{Binding View}" SelectedItem="{Binding Selected}"
-                      AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" HeadersVisibility="Column"
-                      GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#EEE" CanUserAddRows="False">
+            <DataGrid x:Name="List" Grid.Column="0" Margin="12,12,0,12" ItemsSource="{Binding View}" SelectedItem="{Binding Selected}"
+                      AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" CanUserAddRows="False">
                 <DataGrid.Resources>
                     <local:BindingProxy x:Key="Proxy" Data="{Binding}" />
                 </DataGrid.Resources>
                 <DataGrid.RowStyle>
                     <Style TargetType="DataGridRow">
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Emphasis}" Value="attention">
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Emphasis}" Value="review">
-                                <Setter Property="Background" Value="#FFF6E0" />
-                            </DataTrigger>
                             <DataTrigger Binding="{Binding Emphasis}" Value="danger">
-                                <Setter Property="Background" Value="#FDE2E2" />
+                                <Setter Property="Background" Value="{StaticResource LingonberryPale}" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </DataGrid.RowStyle>
                 <DataGrid.Columns>
-                    <DataGridTemplateColumn Header="⚠" Width="26" SortMemberPath="HasWarning" CanUserResize="False">
+                    <DataGridTemplateColumn Header="⚠" Width="30" MinWidth="30" SortMemberPath="HasWarning" CanUserResize="False"
+                                            HeaderStyle="{StaticResource IconHeader}">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding WarningMark}" ToolTip="{Binding WarningTip}" Foreground="#C9302C"
+                                <TextBlock Text="{Binding WarningMark}" ToolTip="{Binding WarningTip}" Foreground="{StaticResource Lingonberry}"
                                            FontWeight="Bold" HorizontalAlignment="Center" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="✓" Binding="{Binding LabeledMark}" Width="24" CanUserResize="False" />
-                    <DataGridTextColumn Header="Laatikko" Binding="{Binding Mailbox}" Width="130"
+                    <DataGridTemplateColumn Header="✓" Width="28" MinWidth="28" SortMemberPath="IsLabeled" CanUserResize="False"
+                                            HeaderStyle="{StaticResource IconHeader}">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding LabeledMark}" Foreground="{StaticResource Leaf}" FontWeight="Bold" HorizontalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Laatikko" Binding="{Binding Mailbox}" Width="110"
                                         Visibility="{Binding Data.ShowMailboxColumn, Source={StaticResource Proxy}, Converter={StaticResource BoolToVisibility}}" />
-                    <DataGridTextColumn Header="Saapunut" Binding="{Binding Received}" SortMemberPath="ReceivedSort" Width="110" />
-                    <DataGridTextColumn Header="Lähettäjä" Binding="{Binding Sender}" Width="140" />
-                    <DataGridTextColumn Header="Otsikko" Binding="{Binding Subject}" Width="*" MinWidth="120" />
-                    <DataGridTextColumn Header="Arvio" Binding="{Binding ListAssessment}" SortMemberPath="PrioritySort" Width="160" />
-                    <DataGridTextColumn Header="Määräaika" Binding="{Binding AiDeadline}" SortMemberPath="DeadlineSort" Width="80" />
+                    <DataGridTextColumn Header="Saapunut" Binding="{Binding Received}" SortMemberPath="ReceivedSort" Width="92" MinWidth="88" />
+                    <DataGridTextColumn Header="Lähettäjä" Binding="{Binding Sender}" Width="135" MinWidth="90" />
+                    <DataGridTextColumn Header="Otsikko" Binding="{Binding Subject}" Width="*" MinWidth="140" />
+                    <DataGridTemplateColumn Header="Arvio" SortMemberPath="PrioritySort" Width="180" MinWidth="160">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Style="{StaticResource ActionTag}">
+                                        <TextBlock Text="{Binding ActionText}" />
+                                    </Border>
+                                    <TextBlock Text="{Binding UrgencyText}" Margin="7,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{StaticResource Muted}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding UrgencyKey}" Value="tanaan">
+                                                        <Setter Property="Foreground" Value="{StaticResource Ink}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding StateText}" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Määräaika" Binding="{Binding AiDeadline}" SortMemberPath="DeadlineSort" Width="88"
+                                        Visibility="{Binding Data.ShowDeadlineColumn, Source={StaticResource Proxy}, Converter={StaticResource BoolToVisibility}}" />
                 </DataGrid.Columns>
             </DataGrid>
 
-            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="#E5E5E5" />
+            <GridSplitter Grid.Column="1" Width="12" HorizontalAlignment="Stretch" Background="Transparent" />
 
-            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" Padding="10">
-                <StackPanel DataContext="{Binding Selected}">
-                    <TextBlock Text="{Binding Subject}" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock Margin="0,4,0,0" TextWrapping="Wrap">
-                        <Run Text="{Binding Sender, Mode=OneWay}" /> <Run Text="{Binding SenderAddressText, Mode=OneWay}" Foreground="Gray" />
-                    </TextBlock>
-                    <TextBlock Foreground="Gray" TextWrapping="Wrap">
-                        <Run Text="{Binding Mailbox, Mode=OneWay}" /> · <Run Text="{Binding Received, Mode=OneWay}" /> · <Run Text="{Binding Status, Mode=OneWay}" />
-                    </TextBlock>
-                    <Button Content="Avaa Outlookissa (Ctrl+O)" HorizontalAlignment="Left" Margin="0,8,0,0" Padding="10,2"
-                            Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+            <Grid Grid.Column="2" Margin="0,12,12,12">
+                <TextBlock Text="Valitse viesti listasta." Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Visibility="{Binding NoSelection, Converter={StaticResource BoolToVisibility}}" />
 
-                    <!-- The program's own warnings: outside the AI box so that blind mode does not hide them. -->
-                    <Border Background="#FDECEC" BorderBrush="#D9534F" BorderThickness="1" Padding="6" Margin="0,12,0,0"
-                            Visibility="{Binding SenderSuspected, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock TextWrapping="Wrap"
-                                   Text="Vastaanottava palvelin ei hyväksynyt lähettäjän tunnistusta, tai näyttönimessä on eri osoite kuin todellisella lähettäjällä. Viesti voi olla huijaus: älä maksa, avaa linkkejä tai anna tunnuksia ennen kuin olet varmistanut lähettäjän muuta kautta." />
-                    </Border>
-                    <Border Background="#FFF4E5" BorderBrush="#F0B35B" BorderThickness="1" Padding="6" Margin="0,12,0,0"
-                            Visibility="{Binding InjectionSuspected, Converter={StaticResource BoolToVisibility}}">
-                        <TextBlock TextWrapping="Wrap"
-                                   Text="Viestissä on tekoälylle osoitettua tekstiä. AI-arvio voi olla viestin ohjailema: tarkista viesti itse." />
-                    </Border>
-
-                    <GroupBox Header="AI-arvio" Margin="0,12,0,0" Padding="6"
-                              Visibility="{Binding ShowAi, Converter={StaticResource BoolToVisibility}}">
-                        <StackPanel>
-                            <TextBlock TextWrapping="Wrap">
-                                <Run Text="{Binding AiAction, Mode=OneWay}" FontWeight="SemiBold" /> · <Run Text="{Binding AiUrgency, Mode=OneWay}" /> · määräaika <Run Text="{Binding AiDeadline, Mode=OneWay}" /> · <Run Text="{Binding AiTopic, Mode=OneWay}" />
-                            </TextBlock>
-                            <TextBlock Text="Yhteenveto" Foreground="Gray" Margin="0,8,0,0" />
-                            <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
-                            <TextBlock Text="Perustelu" Foreground="Gray" Margin="0,8,0,0" />
-                            <TextBlock Text="{Binding Rationale}" TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding Review}" Foreground="#B05000" TextWrapping="Wrap" Margin="0,8,0,0" />
-                            <TextBlock Text="{Binding Category}" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0" />
-                            <TextBlock Text="{Binding ModelInfo}" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
-                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"
-                                       Text="Arvio on paikallisen kielimallin ehdotus. Viestin sisältö voi vaikuttaa siihen, joten tarkista lähettäjä ennen maksuja, tunnusten antamista tai muita toimia." />
-                        </StackPanel>
-                    </GroupBox>
-
-                    <GroupBox Header="Oma merkintä" Margin="0,12,0,0" Padding="6"
-                              DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                <DockPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                    <!-- Labelling form pinned to the bottom, so it never scrolls away. -->
+                    <GroupBox DockPanel.Dock="Bottom" Header="Oma merkintä" Margin="0,10,0,0" Padding="12,4,12,10">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="100" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Text="Toimenpide" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="0" Text="Toimenpide" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
                             <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2" ItemsSource="{Binding ActionOptions}"
                                       DisplayMemberPath="Text" SelectedValuePath="Key" SelectedValue="{Binding EditAction}" />
-                            <TextBlock Grid.Row="1" Text="Kiireellisyys" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="1" Text="Kiireellisyys" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
                             <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,2" ItemsSource="{Binding UrgencyOptions}"
                                       DisplayMemberPath="Text" SelectedValuePath="Key" SelectedValue="{Binding EditUrgency}" />
-                            <TextBlock Grid.Row="2" Text="Aihe" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="2" Text="Aihe" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
                             <ComboBox Grid.Row="2" Grid.Column="1" Margin="0,2" ItemsSource="{Binding TopicOptions}"
                                       DisplayMemberPath="Text" SelectedValuePath="Key" SelectedValue="{Binding EditTopic}" />
-                            <TextBlock Grid.Row="3" Text="Määräaika" VerticalAlignment="Center" />
+                            <TextBlock Grid.Row="3" Text="Määräaika" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
                             <DockPanel Grid.Row="3" Grid.Column="1" Margin="0,2">
-                                <Button DockPanel.Dock="Right" Content="Ei määräaikaa" Padding="6,0" Margin="6,0,0,0"
-                                        Click="ClearDeadline_Click" />
-                                <DatePicker SelectedDate="{Binding EditDeadline}" />
+                                <Button DockPanel.Dock="Right" Content="Tyhjennä" Padding="8,2" Margin="6,0,0,0" Click="ClearDeadline_Click"
+                                        ToolTip="Poistaa määräajan" />
+                                <DatePicker SelectedDate="{Binding EditDeadline}" Loaded="DeadlinePicker_Loaded" />
                             </DockPanel>
                             <WrapPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,0">
-                                <Button Content="Tallenna (Ctrl+S)" Command="{Binding SaveCommand}" Padding="10,2" Margin="0,0,6,4" />
-                                <Button Content="AI oli oikeassa (Ctrl+Enter)" Command="{Binding AcceptAiCommand}" Padding="10,2" Margin="0,0,6,4" />
-                                <Button Content="Poista merkintä" Command="{Binding DeleteLabelCommand}" Padding="10,2" Margin="0,0,6,4" />
+                                <Button Content="Tallenna" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}" Margin="0,0,6,6"
+                                        ToolTip="Tallenna merkintä ja siirry seuraavaan (Ctrl+S)" />
+                                <Button Content="AI oli oikeassa" Command="{Binding AcceptAiCommand}" Margin="0,0,6,6"
+                                        ToolTip="Tallenna AI-arvio merkinnäksi ja siirry seuraavaan (Ctrl+Enter)" />
+                                <Button Content="Poista" Command="{Binding DeleteLabelCommand}" Margin="0,0,6,6" ToolTip="Poista oma merkintä" />
                             </WrapPanel>
-                            <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Text="{Binding Selected.LabelInfo}" Foreground="Gray" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Text="{Binding Selected.LabelInfo}" Foreground="{StaticResource Muted}"
+                                       FontSize="12" TextWrapping="Wrap" />
                         </Grid>
                     </GroupBox>
-                </StackPanel>
-            </ScrollViewer>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel DataContext="{Binding Selected}" Margin="0,0,4,0">
+                            <TextBlock Text="{Binding Subject}" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
+                                <Run Text="{Binding Sender, Mode=OneWay}" FontWeight="SemiBold" /> <Run Text="{Binding SenderAddressText, Mode=OneWay}" Foreground="{StaticResource Muted}" />
+                            </TextBlock>
+                            <TextBlock Foreground="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0" TextWrapping="Wrap">
+                                <Run Text="{Binding Mailbox, Mode=OneWay}" /> · <Run Text="{Binding ReceivedLong, Mode=OneWay}" />
+                            </TextBlock>
+                            <Button Content="Avaa Outlookissa (Ctrl+O)" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                    Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+
+                            <!-- The program's own warnings: outside the AI card so that blind mode does not hide them. -->
+                            <Border Background="{StaticResource LingonberryPale}" BorderBrush="{StaticResource Lingonberry}" BorderThickness="4,0,0,0"
+                                    Padding="12,8" Margin="0,12,0,0"
+                                    Visibility="{Binding SenderSuspected, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel>
+                                    <TextBlock Text="Mahdollinen huijaus" FontWeight="SemiBold" Foreground="{StaticResource Lingonberry}" />
+                                    <TextBlock TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Text="Vastaanottava palvelin ei hyväksynyt lähettäjän tunnistusta, tai näyttönimessä on eri osoite kuin todellisella lähettäjällä. Älä maksa, avaa linkkejä tai anna tunnuksia ennen kuin olet varmistanut lähettäjän muuta kautta." />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="{StaticResource CloudberryPale}" BorderBrush="{StaticResource Cloudberry}" BorderThickness="4,0,0,0"
+                                    Padding="12,8" Margin="0,12,0,0"
+                                    Visibility="{Binding InjectionSuspected, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel>
+                                    <TextBlock Text="Viesti yrittää ohjailla tekoälyä" FontWeight="SemiBold" />
+                                    <TextBlock TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Text="Viestissä on tekoälylle osoitettua tekstiä, joten AI-arvio voi olla viestin ohjailema. Tarkista viesti itse." />
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="AI-arvio on piilotettu, kunnes olet merkinnyt viestin (sokkomerkintä)." Foreground="{StaticResource Muted}"
+                                       FontStyle="Italic" TextWrapping="Wrap" Margin="0,14,0,0"
+                                       Visibility="{Binding AiHidden, Converter={StaticResource BoolToVisibility}}" />
+                            <GroupBox Header="AI-arvio" Margin="0,12,0,0"
+                                      Visibility="{Binding ShowAi, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel>
+                                    <!-- One line: the same facts as the list row, so the card leaves room for the text. -->
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <Border Style="{StaticResource ActionTag}" Margin="0,0,8,0">
+                                            <TextBlock Text="{Binding ActionText}" />
+                                        </Border>
+                                        <TextBlock VerticalAlignment="Center" TextWrapping="Wrap">
+                                            <Run Text="{Binding AiUrgency, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" · " Foreground="{StaticResource Muted}" /><Run Text="määräaika " Foreground="{StaticResource Muted}" /><Run Text="{Binding DeadlineText, Mode=OneWay}" /><Run Text=" · " Foreground="{StaticResource Muted}" /><Run Text="{Binding AiTopic, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </WrapPanel>
+                                    <TextBlock Text="Yhteenveto" Style="{StaticResource Caption}" />
+                                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" LineHeight="19" />
+                                    <TextBlock Text="Perustelu" Style="{StaticResource Caption}" />
+                                    <TextBlock Text="{Binding Rationale}" TextWrapping="Wrap" LineHeight="19" />
+                                    <TextBlock Text="{Binding Review}" Foreground="#8A5300" TextWrapping="Wrap" Margin="0,10,0,0" />
+                                    <TextBlock Text="{Binding Category}" Foreground="{StaticResource Muted}" FontSize="11.5" TextWrapping="Wrap" Margin="0,10,0,0" />
+                                    <TextBlock Text="{Binding ModelInfo}" Foreground="{StaticResource Muted}" FontSize="11.5" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                    <TextBlock Foreground="{StaticResource Muted}" FontSize="11.5" TextWrapping="Wrap" Margin="0,2,0,0"
+                                               Text="Paikallisen kielimallin ehdotus: tarkista lähettäjä ennen maksuja tai tunnusten antamista." />
+                                </StackPanel>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </Grid>
         </Grid>
     </DockPanel>
 </Window>

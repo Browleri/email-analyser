@@ -4,5 +4,245 @@
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <!--
+            Palette from the birch and Finnish nature: bark white and bark black, birch-leaf green,
+            lake blue for tasks, cloudberry for review and lingonberry for phishing warnings.
+            Text colours meet WCAG AA contrast on their backgrounds.
+        -->
+        <SolidColorBrush x:Key="BarkWhite" Color="#F5F4EE" />
+        <SolidColorBrush x:Key="Surface" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="Pale" Color="#EBE9E1" />
+        <SolidColorBrush x:Key="Line" Color="#D6D3C8" />
+        <SolidColorBrush x:Key="LineSoft" Color="#EFEDE6" />
+        <SolidColorBrush x:Key="BarkBlack" Color="#1E2320" />
+        <SolidColorBrush x:Key="Ink" Color="#1E2320" />
+        <SolidColorBrush x:Key="Muted" Color="#5C635C" />
+        <SolidColorBrush x:Key="OnDarkMuted" Color="#A7B0A6" />
+        <SolidColorBrush x:Key="Leaf" Color="#3A7136" />
+        <SolidColorBrush x:Key="LeafDark" Color="#2B5728" />
+        <SolidColorBrush x:Key="LeafBright" Color="#8CC063" />
+        <SolidColorBrush x:Key="LeafHover" Color="#EAF2E3" />
+        <SolidColorBrush x:Key="LeafPressed" Color="#D7E7CB" />
+        <SolidColorBrush x:Key="LeafSelect" Color="#D5E7C8" />
+        <SolidColorBrush x:Key="Lake" Color="#24577A" />
+        <SolidColorBrush x:Key="Cloudberry" Color="#E5A03A" />
+        <SolidColorBrush x:Key="CloudberryPale" Color="#FCF0D9" />
+        <SolidColorBrush x:Key="Lingonberry" Color="#A3221B" />
+        <SolidColorBrush x:Key="LingonberryPale" Color="#F9E1DE" />
+
+        <!-- Birch bark: dark horizontal lenticels on white, as a thin stripe under the title. -->
+        <DrawingBrush x:Key="BirchBark" TileMode="Tile" Stretch="None"
+                      Viewport="0,0,160,8" ViewportUnits="Absolute" Viewbox="0,0,160,8" ViewboxUnits="Absolute">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#F5F4EE">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="0,0,160,8" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                    <GeometryDrawing Brush="#1E2320"
+                                     Geometry="M4,3 h22 v2 h-22 z M36,1 h8 v3 h-8 z M52,5 h30 v2 h-30 z M90,2 h6 v2 h-6 z M104,3 h18 v3 h-18 z M132,1 h12 v2 h-12 z M150,5 h7 v2 h-7 z" />
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+
+        <!-- Buttons: flat, bark-white with a leaf-green hover; Primary is solid green. -->
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource Surface}" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,4" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource LeafHover}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Leaf}" />
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource Leaf}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="{StaticResource LeafPressed}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource Leaf}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Leaf}" />
+            <Setter Property="Foreground" Value="White" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource LeafDark}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource LeafDark}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="#22461F" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- List -->
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="{StaticResource Surface}" />
+            <Setter Property="RowBackground" Value="{StaticResource Surface}" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="GridLinesVisibility" Value="Horizontal" />
+            <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource LineSoft}" />
+            <Setter Property="HeadersVisibility" Value="Column" />
+            <Setter Property="MinRowHeight" Value="28" />
+        </Style>
+
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{StaticResource Pale}" />
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridColumnHeader">
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                                <DockPanel>
+                                    <Path x:Name="SortArrow" DockPanel.Dock="Right" Margin="6,0,0,0" VerticalAlignment="Center"
+                                          Fill="{StaticResource Muted}" Data="M0,0 L8,0 L4,5 Z" Visibility="Collapsed"
+                                          RenderTransformOrigin="0.5,0.5" />
+                                    <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                                </DockPanel>
+                            </Border>
+                            <Thumb x:Name="PART_RightHeaderGripper" HorizontalAlignment="Right" Width="6" Cursor="SizeWE">
+                                <Thumb.Template>
+                                    <ControlTemplate TargetType="Thumb">
+                                        <Border Background="Transparent" />
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="SortDirection" Value="Descending">
+                                <Setter TargetName="SortArrow" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="SortDirection" Value="Ascending">
+                                <Setter TargetName="SortArrow" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="SortArrow" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <RotateTransform Angle="180" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Narrow icon columns: centred, no padding, so the symbol is not clipped. -->
+        <Style x:Key="IconHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="Padding" Value="0,6" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style TargetType="DataGridCell">
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource LeafSelect}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Cards: white panels with a thin bark-grey border and a green heading. -->
+        <Style TargetType="GroupBox">
+            <Setter Property="Padding" Value="12,6,12,12" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GroupBox">
+                        <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="6">
+                            <DockPanel>
+                                <ContentPresenter DockPanel.Dock="Top" ContentSource="Header" Margin="12,10,12,0"
+                                                  TextBlock.FontWeight="SemiBold" TextBlock.Foreground="{StaticResource LeafDark}" />
+                                <ContentPresenter Margin="{TemplateBinding Padding}" />
+                            </DockPanel>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="StatusBar">
+            <Setter Property="Background" Value="{StaticResource Pale}" />
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+        </Style>
+
+        <!-- Small caption above a value in the detail pane. -->
+        <Style x:Key="Caption" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="0,10,0,2" />
+        </Style>
+
+        <!-- Action tag: one colour per action, used in the list and in the detail pane. -->
+        <Style x:Key="ActionTag" TargetType="Border">
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Padding" Value="7,1" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{StaticResource Pale}" />
+            <Setter Property="TextBlock.Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="TextBlock.FontSize" Value="12" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding ActionKey}" Value="">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ActionKey}" Value="vastattava">
+                    <Setter Property="Background" Value="{StaticResource Leaf}" />
+                    <Setter Property="TextBlock.Foreground" Value="White" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ActionKey}" Value="tehtava">
+                    <Setter Property="Background" Value="{StaticResource Lake}" />
+                    <Setter Property="TextBlock.Foreground" Value="White" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ActionKey}" Value="tarkista">
+                    <Setter Property="Background" Value="{StaticResource Cloudberry}" />
+                    <Setter Property="TextBlock.Foreground" Value="{StaticResource Ink}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Application.Resources>
 </Application>

@@ -106,7 +106,7 @@ public static class Display
 
     public static readonly IReadOnlyList<Option> Urgencies =
     [
-        new("tanaan", "Tänään"), new("talla_viikolla", "Tällä viikolla"), new("myohemmin", "Myöhemmin"), new("ei_maaraaikaa", "Ei määräaikaa"),
+        new("tanaan", "Tänään"), new("talla_viikolla", "Tällä viikolla"), new("myohemmin", "Myöhemmin"), new("ei_maaraaikaa", "Ei kiirettä"),
     ];
 
     public static readonly IReadOnlyList<Option> Topics =

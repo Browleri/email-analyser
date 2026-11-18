@@ -8,19 +8,22 @@ using EmailAnalyser.Outlook;
 
 namespace EmailAnalyser.App;
 
-public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode)
+/// <param name="mask">When set, message text is replaced with placeholders (masked mode).</param>
+public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode, DisplayMask? mask = null)
 {
     public ReviewItem Item { get; } = item;
 
     public long Id => Item.MessageId;
-    public string Mailbox => SafeText.Clean(Item.Mailbox, keepNewlines: false);
-    public string Received => Item.Received.ToLocalTime().ToString("dd.MM.yyyy HH.mm");
+    public string Mailbox => mask?.Mailbox(Item.Mailbox) ?? SafeText.Clean(Item.Mailbox, keepNewlines: false);
+    // Retention keeps 90 days, so the year adds nothing in the list.
+    public string Received => Item.Received.ToLocalTime().ToString("d.M. HH.mm");
+    public string ReceivedLong => Item.Received.ToLocalTime().ToString("d.M.yyyy 'klo' HH.mm");
     public DateTimeOffset ReceivedSort => Item.Received;
-    public string Sender => SafeText.Clean(Item.SenderName, keepNewlines: false);
-    public string SenderAddress => SafeText.Clean(Item.SenderAddress, keepNewlines: false);
+    public string Sender => mask?.SenderName(Item) ?? SafeText.Clean(Item.SenderName, keepNewlines: false);
+    public string SenderAddress => mask?.SenderAddress(Item) ?? SafeText.Clean(Item.SenderAddress, keepNewlines: false);
     public string SenderAddressText => SenderAddress.Length == 0 ? "" : $"<{SenderAddress}>";
     public string Subject => Item.Subject is not null
-        ? SafeText.Clean(Item.Subject, keepNewlines: false)
+        ? mask is null ? SafeText.Clean(Item.Subject, keepNewlines: false) : DisplayMask.Text(Id * 3, Item.Subject.Length, 80)
         : Item.Assessment is not null || Item.Label is not null ? "(tunnistetiedot poistettu säilytysajan päätyttyä)" : "(ei vielä luettu)";
     public string Status => Display.Text(Item.Status);
     public bool IsLabeled => Item.Label is not null;
@@ -28,13 +31,17 @@ public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode)
 
     /// <summary>In blind mode the AI's answer is hidden until the user has labelled the message.</summary>
     public bool ShowAi => Item.Assessment is not null && (!blindMode() || IsLabeled);
+    public bool AiHidden => Item.Assessment is not null && !ShowAi;
 
     public string AiAction => ShowAi ? Display.Text(Item.Assessment!.Action) : Hidden;
     public string AiUrgency => ShowAi ? Display.Text(Item.Assessment!.Urgency) : Hidden;
     public string AiTopic => ShowAi ? Display.Text(Item.Assessment!.Topic) : Hidden;
-    public string AiDeadline => ShowAi ? Item.Assessment!.Deadline?.ToString("dd.MM.yyyy") ?? "–" : Hidden;
-    public string Summary => ShowAi ? SafeText.ModelText(Item.Assessment!.Summary) : "";
-    public string Rationale => ShowAi ? SafeText.ModelText(Item.Assessment!.Rationale) : "";
+    public string AiDeadline => Item.Assessment is null ? "" : ShowAi ? Item.Assessment.Deadline?.ToString("d.M.yyyy") ?? "" : Hidden;
+    public string DeadlineText => AiDeadline.Length == 0 ? "ei määräaikaa" : AiDeadline;
+    public string Summary => !ShowAi ? "" :
+        mask is null ? SafeText.ModelText(Item.Assessment!.Summary) : DisplayMask.Text(Id * 3 + 1, Item.Assessment!.Summary.Length, 320);
+    public string Rationale => !ShowAi ? "" :
+        mask is null ? SafeText.ModelText(Item.Assessment!.Rationale) : DisplayMask.Text(Id * 3 + 2, Item.Assessment!.Rationale.Length, 320);
     public string Review => !ShowAi || !Item.Assessment!.NeedsReview
         ? ""
         : "Tarkistettava: " + string.Join(", ", Item.Assessment.ReviewReasons.Select(Display.Text));
@@ -51,21 +58,19 @@ public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode)
         SenderSuspected ? "Lähettäjän tunnistus ei täsmää: viesti voi olla huijaus" :
         InjectionSuspected ? "Viestissä on tekoälylle osoitettua tekstiä" : null;
 
-    /// <summary>Row highlight: danger (sender check failed), attention (reply or task) or review.</summary>
-    public string Emphasis =>
-        SenderSuspected ? "danger" :
-        !ShowAi ? "" :
-        Item.Assessment!.Action switch
-        {
-            "vastattava" or "tehtava" => "attention",
-            "tarkista" => "review",
-            _ => "",
-        };
+    /// <summary>Row highlight: only a failed sender check colours the whole row.</summary>
+    public string Emphasis => SenderSuspected ? "danger" : "";
 
-    /// <summary>Action and urgency in one column; the processing state when there is no current assessment.</summary>
-    public string ListAssessment =>
-        Item.Status != "assessed" || Item.Assessment is null ? Status :
-        ShowAi ? $"{AiAction} · {AiUrgency.ToLowerInvariant()}" : Hidden;
+    private bool HasCurrentAssessment => Item.Status == "assessed" && Item.Assessment is not null;
+
+    /// <summary>The action for the coloured tag in the list; empty when hidden or not assessed.</summary>
+    public string ActionKey => HasCurrentAssessment && ShowAi ? Item.Assessment!.Action : "";
+    public string ActionText => Display.Text(ActionKey);
+    public string UrgencyKey => ActionKey.Length > 0 ? Item.Assessment!.Urgency : "";
+    public string UrgencyText => Display.Text(UrgencyKey).ToLowerInvariant();
+
+    /// <summary>Shown instead of the tag: the processing state, or the blind-mode mask.</summary>
+    public string StateText => !HasCurrentAssessment ? Status : ShowAi ? "" : Hidden;
 
     /// <summary>Most important first when sorted ascending: action, then urgency.</summary>
     public int PrioritySort =>
@@ -109,6 +114,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly AnalyserStore _store;
     private readonly OutlookMailbox _outlook = new();
     private readonly MonitorHost? _monitor;
+    private readonly DisplayMask? _mask;
     private string _statusMonitor = "Seuranta käynnistyy…";
     private bool _monitorAttention;
     private bool _monitorPaused;
@@ -118,12 +124,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _filter = "huomio";
     private string _mailbox = AllMailboxes;
     private bool _blindMode;
+    private bool _compact;
     private string? _editAction, _editUrgency, _editTopic;
     private DateTime? _editDeadline;
     private string _statusList = "", _statusLabels = "", _statusProblems = "";
 
-    public MainViewModel()
+    public MainViewModel(AppOptions options)
     {
+        _mask = options.Mask ? new DisplayMask() : null;
         _store = AnalyserStore.Open(AppPaths.Database, KeyStore.GetOrCreateHexKey(AppPaths.DatabaseKey));
         View = CollectionViewSource.GetDefaultView(Items);
         View.Filter = o => o is ItemViewModel vm && Matches(vm);
@@ -138,7 +146,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Refresh();
 
         var settings = AppSettings.Load(AppPaths.Settings);
-        if (settings.Stores.Count == 0)
+        if (!options.Monitor)
+        {
+            StatusMonitor = "Seuranta ei ole käynnissä (näkymä avattiin ilman seurantaa)";
+        }
+        else if (settings.Stores.Count == 0)
         {
             StatusMonitor = "Seuranta ei ole käytössä: valitse laatikot komennolla email-analyser init --stores …";
         }
@@ -160,8 +172,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         new("huomiotta", "Huomiotta jääneet"), new("ongelmat", "Ongelmat ja jonossa"),
     ];
 
-    /// <summary>The mailbox column is redundant when one mailbox is chosen.</summary>
-    public bool ShowMailboxColumn => Mailbox == AllMailboxes;
+    /// <summary>The mailbox column is redundant when one mailbox is chosen, and dropped in a narrow window.</summary>
+    public bool ShowMailboxColumn => Mailbox == AllMailboxes && !Compact;
+
+    /// <summary>The deadline is also in the detail pane, so a narrow window drops the column.</summary>
+    public bool ShowDeadlineColumn => !Compact;
+
+    /// <summary>Set by the window when it is too narrow for every column.</summary>
+    public bool Compact
+    {
+        get => _compact;
+        set
+        {
+            if (Set(ref _compact, value))
+            {
+                OnPropertyChanged(nameof(ShowMailboxColumn));
+                OnPropertyChanged(nameof(ShowDeadlineColumn));
+            }
+        }
+    }
+
+    public bool Masked => _mask is not null;
+    public string WindowTitle => Masked ? "Sähköpostiavustaja – peitetty näkymä" : "Sähköpostiavustaja";
+    public bool HasSelection => Selected is not null;
+    public bool NoSelection => Selected is null;
     public IReadOnlyList<Option> ActionOptions => Display.Actions;
     public IReadOnlyList<Option> UrgencyOptions => Display.Urgencies;
     public IReadOnlyList<Option> TopicOptions => Display.Topics;
@@ -242,6 +276,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             if (Set(ref _selected, value))
             {
+                OnPropertyChanged(nameof(HasSelection));
+                OnPropertyChanged(nameof(NoSelection));
                 LoadEditor();
             }
         }
@@ -283,8 +319,34 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         MonitorPaused = _monitor.Monitor.Paused;
     }
 
+    /// <summary>Selects the first row in the current view order that matches; for the screenshot run.</summary>
+    public bool SelectFirst(Func<ItemViewModel, bool> predicate)
+    {
+        var match = View.Cast<ItemViewModel>().FirstOrDefault(predicate);
+        if (match is not null)
+        {
+            Selected = match;
+        }
+
+        return match is not null;
+    }
+
+    /// <summary>The real texts that masked mode must keep off the screen.</summary>
+    public IReadOnlyCollection<SensitiveText> SensitiveTexts() =>
+        Screenshots.Prefixes(Items.SelectMany(vm => new (string, string?)[]
+        {
+            ("otsikko", vm.Item.Subject), ("lähettäjän nimi", vm.Item.SenderName), ("lähettäjän osoite", vm.Item.SenderAddress),
+            ("laatikko", vm.Item.Mailbox), ("yhteenveto", vm.Item.Assessment?.Summary), ("perustelu", vm.Item.Assessment?.Rationale),
+        }));
+
     private void OnMonitorStatus(MonitorStatus status)
     {
+        if (Masked && status.Problem is not null)
+        {
+            // Problems can name mailboxes.
+            status = status with { Problem = DisplayMask.HiddenProblem };
+        }
+
         StatusMonitor = MonitorText.Describe(status);
         MonitorAttention = status.Problem is not null || status.DeferralWarning;
         MonitorPaused = status.Paused;
@@ -300,16 +362,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _assessmentsAtReload = _assessmentsNow;
         OnPropertyChanged(nameof(NewResultsHint));
         var items = _store.GetReviewItems();
-        using (View.DeferRefresh())
+        Items.Clear();
+        foreach (var item in items)
         {
-            Items.Clear();
-            foreach (var item in items)
-            {
-                Items.Add(new ItemViewModel(item, () => BlindMode));
-            }
+            Items.Add(new ItemViewModel(item, () => BlindMode, _mask));
         }
 
-        foreach (var mailbox in items.Select(i => i.Mailbox).Distinct().Order().Where(m => !Mailboxes.Contains(m)))
+        // Display names, so that masked mode lists placeholders.
+        foreach (var mailbox in Items.Select(i => i.Mailbox).Distinct().Order().Where(m => !Mailboxes.Contains(m)))
         {
             Mailboxes.Add(mailbox);
         }
@@ -321,7 +381,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private bool Matches(ItemViewModel vm) => InMailbox(vm) && MatchesFilter(vm, Filter);
 
-    private bool InMailbox(ItemViewModel vm) => Mailbox == AllMailboxes || vm.Item.Mailbox == Mailbox;
+    private bool InMailbox(ItemViewModel vm) => Mailbox == AllMailboxes || vm.Mailbox == Mailbox;
 
     private void UpdateFilterCounts()
     {
@@ -436,6 +496,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StatusLabels = $"Merkitty {labeled.Count}/{items.Count(i => i.Assessment is not null)} " +
                        $"(säätöosa {labeled.Count(l => l.Label!.Split == LabelSplit.Tuning)}, arviointiosa {labeled.Count(l => l.Label!.Split == LabelSplit.Holdout)})";
         var problems = _store.ProblemsByMailbox();
-        StatusProblems = problems.Count == 0 ? "Ei ongelmia" : "Ongelmia: " + string.Join(", ", problems.Select(p => $"{p.Key} {p.Value}"));
+        StatusProblems = problems.Count == 0 ? "Ei ongelmia" : "Ongelmia: " + string.Join(", ", problems.Select(p =>
+            $"{_mask?.Mailbox(p.Key) ?? SafeText.Clean(p.Key, keepNewlines: false)} {p.Value}"));
     }
 }

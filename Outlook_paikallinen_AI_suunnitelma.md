@@ -298,22 +298,28 @@ Kaikki 192 viestiä arvioitiin uudelleen kehotteella `classify-v1-f982a679` 17.1
 Käyttöliittymän arvioinnin korjaukset 17.11.2026 (vaiheen 5 jälkeen, ennen otoksen merkintää):
 
 - Huijaus- ja ohjailuvaroitus näkyvät AI-arvion ulkopuolella myös sokkotilassa (tietoturva-arvion F17). Listassa on varoitussarake.
-- Rivit korostetaan: vastattava ja tehtävä lihavoituna, tarkista keltaisella ja huijausepäily punaisella. Sokkotilassa korostus näkyy vain varoituksista.
+- Rivit korostetaan: vastattava ja tehtävä lihavoituna, tarkista keltaisella ja huijausepäily punaisella. Sokkotilassa korostus näkyy vain varoituksista. (Kuvakaappausarvioinnissa lihavointi ja keltainen rivi korvattiin toimenpiteen värimerkillä, ks. alla. Punainen rivi jäi huijausepäilylle.)
 - Oletussuodatin on "Vaatii huomiota" (vastattava, tehtävä, tarkista ja varoitetut). Jokaisen suodattimen kohdalla näkyy osumien määrä valitussa laatikossa.
 - Sarakkeita karsittiin, jotta otsikolle jää tilaa: toimenpide ja kiireellisyys ovat yhdessä Arvio-sarakkeessa, jossa näkyy käsittelytila, jos ajantasaista arviota ei ole. Laatikko-sarake piilotetaan, kun yksi laatikko on valittuna. Erillinen Tila-sarake poistettiin.
 - Arvio lajittuu tärkeyden mukaan (toimenpide, sitten kiireellisyys) ja määräaika päivämääränä.
 - Yläpalkki rivittyy kapeassa ikkunassa. Seurannan painikkeet ovat alarivillä seurannan tilan vieressä.
 - Tilarivit eivät enää näytä ristiriitaisia lukuja: seurannan rivi näyttää ajantasaisen jonon ja erät, ja listan rivi kertoo, milloin lista on viimeksi päivitetty.
 
-Jäljellä: käyttäjä merkitsee otoksen näkymässä, minkä jälkeen löytymisosuus ja turhat hälytykset mitataan arviointiosasta. Jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
+Kuvakaappausarviointi ja teema 17.11.2026:
+
+- **Peitetty tila:** `--mask` korvaa otsikot, lähettäjät, laatikot, yhteenvedot ja perustelut paikkamerkeillä. `--screenshots <kansio>` ottaa peitetyt kuvat seitsemästä tilasta ja tarkistaa ennen jokaista kuvaa, ettei ikkunassa näy oikeaa tekstiä (tietoturva-arvion R33). Näin agentti voi arvioida ulkoasua näkemättä viestejä.
+- **Kuvista löytyneet korjaukset:** ilman valintaa paneeli näytti varoitukset ja tyhjän arvion (F18), jonossa olevien määräaikana näkyi `•••`, päivämääräkentän ohje oli englanniksi, merkintälomake jäi vierityksen alle ja kapea ikkuna puristi sarakkeet lukukelvottomiksi. Lisäksi edellisen kierroksen `DeferRefresh` kaatoi näkymän käynnistyksessä.
+- **Ulkoasu:** koivun ja suomalaisen luonnon värit. Tumma tuohenmusta otsikkopalkki ja tuohikuvioinen raita. Toimenpiteillä on värimerkit: vastattava koivunlehden vihreä, tehtävä järvensininen ja tarkista lakankeltainen. Huijausvaroitus on puolukanpunainen.
+- **Asettelu:** merkintälomake on kiinnitetty paneelin alaosaan, AI-arvion tiedot ovat yhdellä rivillä, saapumisaika on lyhyessä muodossa ja kiireellisyys "Ei määräaikaa" on nyt "Ei kiirettä", jotta se ei sekoitu määräaikaan. Alle 1250 pikselin leveydellä Laatikko- ja Määräaika-sarakkeet piilotetaan.
+- **Jäljellä ulkoasussa:** varoitusviestin AI-arvio vaatii vierittämistä oletuskorkeudella (820 px), ja pudotusvalikot ja päivämääräkenttä ovat Windowsin oletustyyliä.
 
 #### Käyttöliittymän jatkokehitys (koodikatselmointi 17.11.2026)
 
-Näkymä katselmoitiin koodin perusteella (`MainWindow.xaml`, `MainViewModel.cs`) suunnitelman Käyttökokemus-osiota vasten. Näkymää ei ajettu. Suunnitelman mukaisesti on toteutettu yhteinen lista ja laatikkosuodatin, lista- ja tietopaneeli, toimenpidesuodattimet lukumäärineen, avaus Outlookissa, oma merkintä pikanäppäimineen, tarkistettavan syyt, jonossa ja virheelliset viestit omassa suodattimessaan, seurannan tila sekä Käsittele nyt ja keskeytys. Vaiheen 3 merkintätyölle on sokkomerkintä, säätö- ja arviointiosa sekä "Huomiotta jääneet". Ensikäynnistyksen valinnat, asetukset, luokkien käyttöönotto ja säilytys ovat vielä vain komentorivillä.
+Näkymä katselmoitiin koodin perusteella (`MainWindow.xaml`, `MainViewModel.cs`) suunnitelman Käyttökokemus-osiota vasten. Näkymää ei ajettu. Katselmointi tehtiin rinnakkain yllä olevan kuvakaappausarvioinnin kanssa, ja se perustuu sitä edeltävään koodiin. Kuvakaappausarviointi korvasi lihavoinnin värimerkeillä ja korjasi kapean ikkunan sarakkeet. Alla olevat löydökset 1–6 ovat yhä voimassa, samoin pienemmät löydökset. Värimerkit tekevät kohdan 1 jopa näkyvämmäksi, koska korjattu viesti näyttää edelleen AI-arvion värin. Suunnitelman mukaisesti on toteutettu yhteinen lista ja laatikkosuodatin, lista- ja tietopaneeli, toimenpidesuodattimet lukumäärineen, avaus Outlookissa, oma merkintä pikanäppäimineen, tarkistettavan syyt, jonossa ja virheelliset viestit omassa suodattimessaan, seurannan tila sekä Käsittele nyt ja keskeytys. Vaiheen 3 merkintätyölle on sokkomerkintä, säätö- ja arviointiosa sekä "Huomiotta jääneet". Ensikäynnistyksen valinnat, asetukset, luokkien käyttöönotto ja säilytys ovat vielä vain komentorivillä.
 
 Löydökset vakavimmasta alkaen:
 
-1. **Oma merkintä ei vaikuta listaan.** Suodattimet, Arvio-sarake, korostus ja tärkeysjärjestys lukevat vain AI-arviota. Jos AI arvioi uutiskirjeen vastattavaksi ja käyttäjä korjaa sen tiedoksi, viesti jää "Vaatii huomiota" -näkymään lihavoituna. Outlook-luokat taas noudattavat merkintää (`AiCategories.Desired`), joten sovellus ja Outlook näyttävät eri luokan, eikä korjauksen etusija toteudu omassa näkymässä.
+1. **Oma merkintä ei vaikuta listaan.** Suodattimet, Arvio-sarake, korostus ja tärkeysjärjestys lukevat vain AI-arviota. Jos AI arvioi uutiskirjeen vastattavaksi ja käyttäjä korjaa sen tiedoksi, viesti jää "Vaatii huomiota" -näkymään vastattavan merkillä. Outlook-luokat taas noudattavat merkintää (`AiCategories.Desired`), joten sovellus ja Outlook näyttävät eri luokan, eikä korjauksen etusija toteudu omassa näkymässä.
 2. **Viestiä ei voi kuitata hoidetuksi.** "Vaatii huomiota" kasvaa säilytysajan loppuun asti, eikä merkintäkään poista viestiä näkymästä.
 3. **Sokkotila tyhjentää oletusnäkymän.** Kun AI-arvio on piilotettu, "Vaatii huomiota" näyttää vain varoitetut viestit. Jos sokkotila jää päälle, käyttäjä voi luulla, ettei mikään vaadi huomiota.
 4. **Uudet arviot näkyvät vasta F5:llä.** Tämä on tarkoituksellista merkintätyön aikana, mutta päivittäisessä käytössä tärkeä viesti voi jäädä huomaamatta pienen vihjetekstin varaan.
@@ -337,9 +343,11 @@ Toteutusjärjestys:
 
 Kohdat 1–2 tehdään ennen otoksen merkintää ja luokkien kytkemistä päälle, koska ne vaikuttavat siihen, mitä käyttäjä näkee huomiota vaativina. Muutokset eivät lisää verkkoyhteyksiä tai Outlook-kirjoituksia, joten tietoturva-arviota ei tarvitse päivittää.
 
+Jäljellä vaiheessa 3: toteutusjärjestyksen kohdat 1–2, minkä jälkeen käyttäjä merkitsee otoksen näkymässä. Sitten löytymisosuus ja turhat hälytykset mitataan arviointiosasta, ja jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
+
 ### 4. Tietoturvan arviointi
 
-Sähköpostin sisältö on hyökkääjän hallitsemaa syötettä, ja se kulkee kielimallin kautta käyttäjän näkymään ja myöhemmin Outlook-luokkiin. Ennen kuin sovellus kirjoittaa Outlookiin tai otetaan jatkuvaan käyttöön, riskit arvioidaan järjestelmällisesti ja toteutus käydään läpi niiden kannalta. Arvio on tiedostossa [docs/tietoturva-arvio.md](docs/tietoturva-arvio.md). Siinä ovat suojattavat kohteet, tietovirrat ja luottamusrajat, hyökkääjät, riskirekisteri (R1–R29) todennäköisyyksineen ja vaikutuksineen, toteutuksesta löydetyt puutteet (F1–F10) sekä avoimet toimenpiteet.
+Sähköpostin sisältö on hyökkääjän hallitsemaa syötettä, ja se kulkee kielimallin kautta käyttäjän näkymään ja myöhemmin Outlook-luokkiin. Ennen kuin sovellus kirjoittaa Outlookiin tai otetaan jatkuvaan käyttöön, riskit arvioidaan järjestelmällisesti ja toteutus käydään läpi niiden kannalta. Arvio on tiedostossa [docs/tietoturva-arvio.md](docs/tietoturva-arvio.md). Siinä ovat suojattavat kohteet, tietovirrat ja luottamusrajat, hyökkääjät, riskirekisteri (nyt R1–R33) todennäköisyyksineen ja vaikutuksineen, toteutuksesta löydetyt puutteet (nyt F1–F18) sekä avoimet toimenpiteet.
 
 Tila 17.11.2026: arvio on tehty, ja puutteet F1–F10 on korjattu ja testattu. Hyökkäystesti paljasti, että malli totteli väärennettyä erotinta ja roolileikkiä. Siksi ohjelma pakottaa nyt toimenpiteeksi "tarkista" aina, kun viestissä havaitaan ohjailuyritys (F10). Korjauksen jälkeen kaikki kuusi hyökkäystapausta päätyivät tarkistettaviksi, eikä 192 oikeasta viestistä yksikään osunut heuristiikkaan. Sovelluksen ulkopuoliset riskit R13–R16 odottavat käyttäjän päätöstä, ja vaiheen 5 kirjoitusvaatimukset ovat arvion kohdassa "Avoimet toimenpiteet".
 
@@ -413,7 +421,7 @@ Liitteiden analyysi, OCR, automaattinen lähetys, poistaminen ja kansiosiirrot s
 
 ## Riippuvuudet ja rajoitukset
 
-Tämä on suunnitelma, ei vielä käyttäjän Outlook-ympäristössä testattu toteutus. Tarvitaan Windows, Classic Outlook, toimiva profiili, .NET 10 ja LM Studio, jossa on vähintään yksi ehdokasmalli. Työ tehdään käyttäjän oikeuksilla; organisaatiokäytännöt voivat silti estää sovelluksen ajamisen tai Outlook-automaation. Gmailista näkyy Outlookiin synkronoitu sisältö ja Gmailin kansiorakenteen aiheuttamat kopiot pitää huomioida. Käyttäjän pitää valita sääntöjen siirtokansiot seurantaan, jos niiden viestejä halutaan arvioida.
+Vaiheet 0–2 ja 4 on hyväksytty käyttäjän Outlook-ympäristössä. Vaiheet 3 ja 5 on toteutettu, mutta niiden hyväksyntä odottaa otoksen merkintää ja käsikokeita. Tarvitaan Windows, Classic Outlook, toimiva profiili, .NET 10 ja LM Studio, jossa on vähintään yksi ehdokasmalli. Työ tehdään käyttäjän oikeuksilla; organisaatiokäytännöt voivat silti estää sovelluksen ajamisen tai Outlook-automaation. Gmailista näkyy Outlookiin synkronoitu sisältö ja Gmailin kansiorakenteen aiheuttamat kopiot pitää huomioida. Käyttäjän pitää valita sääntöjen siirtokansiot seurantaan, jos niiden viestejä halutaan arvioida.
 
 Näytönohjain on yhteinen Automatic1111:n, Prompterin kehoteavustajan ja tämän sovelluksen kesken. Eräajo väistää muita käyttäjiä, joten kuormitetulla hetkellä arviot viivästyvät. LM Studion palvelin on avoinna lähiverkkoon ilman tunnistautumista. Tunnistautumisen käyttöönotosta päätetään erikseen, koska se vaatisi muutoksia myös Prompteriin.
 
