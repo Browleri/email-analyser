@@ -42,6 +42,8 @@ internal static class Program
                 "labels" => EvaluateLabels(args),
                 "injection-scan" => await InjectionScan(),
                 "requeue" => Requeue(args),
+                "export-labels" => ExportLabels(args),
+                "import-labels" => ImportLabels(args),
                 "verify-logs" => VerifyLogs(),
                 "db-check" => DbCheck(),
                 _ => Help(),
@@ -80,6 +82,9 @@ internal static class Program
               labels [--split arviointi|saato|kaikki] arvioiden osuvuus käyttäjän merkintöihin (oletus arviointi)
               requeue --labeled saato|arviointi|kaikki merkityt viestit uudelleen jonoon (esim. uuden kehotteen mittaus)
               requeue --all                           kaikki käsitellyt viestit uudelleen jonoon (kehotteen vaihtuessa)
+              export-labels --out <tiedosto>          omat merkinnät tunnuslauseella salattuun tiedostoon (varmuuskopio)
+              import-labels <tiedosto>                palauta merkinnät; puuttuvat viestit jonoon uudelleen arvioitaviksi
+                                                      [--passphrase-env MUUTTUJA] lukee tunnuslauseen ympäristömuuttujasta
               injection-scan                          ohjailuheuristiikan osumat oikeissa viesteissä (vain määrät)
               verify-logs                             tarkista, ettei LM Studion lokeissa ole viestisisältöä
               db-check                                tarkista, ettei tietokanta aukea ilman avainta
@@ -482,6 +487,158 @@ internal static class Program
         var count = store.RequeueLabeled(split == "kaikki" ? null : split, DateTimeOffset.UtcNow);
         Console.WriteLine($"Jonoon palautettiin {count} merkittyä viestiä. Merkinnät säilyvät; aja seuraavaksi run.");
         return 0;
+    }
+
+    /// <summary>
+    /// Writes the labels to a passphrase-encrypted file and reads it back to verify it.
+    /// Refuses OneDrive folders unless asked: the export must not reach a cloud copy
+    /// without a separate decision (plan: Säilytys ja varmuuskopiointi).
+    /// </summary>
+    private static int ExportLabels(string[] args)
+    {
+        if (Option(args, "--out") is not { } output)
+        {
+            Console.Error.WriteLine("Anna tiedosto: export-labels --out <tiedosto>");
+            return 1;
+        }
+
+        var path = Path.GetFullPath(output);
+        if (CloudFolder(path) is { } cloud && !args.Contains("--allow-cloud"))
+        {
+            Console.Error.WriteLine($"Tiedosto on OneDrive-kansiossa ({cloud}), josta se kopioituisi pilveen. Valitse paikallinen kansio tai lisää --allow-cloud.");
+            return 1;
+        }
+
+        using var store = OpenStore();
+        var labels = store.ExportLabels();
+        if (labels.Count == 0)
+        {
+            Console.WriteLine("Merkintöjä ei ole, joten mitään ei viety.");
+            return 0;
+        }
+
+        var passphrase = ReadPassphrase(args, confirm: true);
+        var bytes = LabelBackup.Encrypt(labels, passphrase, DateTimeOffset.UtcNow);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temporary = path + ".tmp";
+        File.WriteAllBytes(temporary, bytes);
+        var verified = LabelBackup.Decrypt(File.ReadAllBytes(temporary), passphrase);
+        if (verified.Count != labels.Count)
+        {
+            File.Delete(temporary);
+            Console.Error.WriteLine("Vientitiedoston tarkistus epäonnistui, joten tiedostoa ei tallennettu.");
+            return 4;
+        }
+
+        File.Move(temporary, path, overwrite: true);
+        Console.WriteLine($"Viety {labels.Count} merkintää (säätöosa {labels.Count(l => l.Split == LabelSplit.Tuning)}, " +
+                          $"arviointiosa {labels.Count(l => l.Split == LabelSplit.Holdout)}) tiedostoon {path}.");
+        Console.WriteLine("Tiedosto on salattu tunnuslauseella ja tarkistettu lukemalla. Ilman tunnuslausetta sitä ei voi palauttaa: säilytä se salasanojen hallinnassa.");
+        return 0;
+    }
+
+    private static int ImportLabels(string[] args)
+    {
+        var file = args.Skip(1).FirstOrDefault(a => !a.StartsWith("--", StringComparison.Ordinal));
+        if (file is null || !File.Exists(file))
+        {
+            Console.Error.WriteLine("Anna olemassa oleva vientitiedosto: import-labels <tiedosto>");
+            return 1;
+        }
+
+        IReadOnlyList<ExportedLabel> labels;
+        try
+        {
+            labels = LabelBackup.Decrypt(File.ReadAllBytes(file), ReadPassphrase(args, confirm: false));
+        }
+        catch (InvalidDataException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 4;
+        }
+
+        using var store = OpenStore();
+        var r = store.ImportLabels(labels, DateTimeOffset.UtcNow);
+        Console.WriteLine($"Tiedostossa {labels.Count} merkintää. Tuotiin {r.Imported}, joista {r.NewMessages} viestiä lisättiin jonoon uudelleen arvioitaviksi.");
+        Console.WriteLine($"Ohitettiin {r.KeptNewer}, koska tietokannassa oli uudempi merkintä, ja {r.Rejected} sallimattomien arvojen vuoksi.");
+        if (r.NewMessages > 0)
+        {
+            Console.WriteLine("Jonon viestit arvioidaan seuraavassa erässä (näkymä tai run). Viesti, jota Outlookissa ei enää ole, näkyy ongelmana.");
+        }
+
+        return 0;
+    }
+
+    private static string? CloudFolder(string path)
+    {
+        foreach (var variable in new[] { "OneDrive", "OneDriveConsumer", "OneDriveCommercial" })
+        {
+            if (Environment.GetEnvironmentVariable(variable) is { Length: > 0 } root &&
+                path.StartsWith(Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                return root;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Reads the passphrase from an environment variable, redirected input or the console without echo.</summary>
+    private static string ReadPassphrase(string[] args, bool confirm)
+    {
+        if (Option(args, "--passphrase-env") is { } variable)
+        {
+            var value = Environment.GetEnvironmentVariable(variable)
+                        ?? throw new ArgumentException($"Ympäristömuuttujaa {variable} ei ole asetettu.");
+            LabelBackup.CheckPassphrase(value);
+            return value;
+        }
+
+        if (Console.IsInputRedirected)
+        {
+            // PowerShell may prefix piped text with a byte order mark.
+            var line = (Console.In.ReadLine() ?? throw new ArgumentException("Tunnuslause puuttuu.")).TrimStart('﻿').TrimEnd('\r');
+            LabelBackup.CheckPassphrase(line);
+            return line;
+        }
+
+        var first = PromptHidden($"Tunnuslause (vähintään {LabelBackup.MinPassphraseLength} merkkiä): ");
+        LabelBackup.CheckPassphrase(first);
+        if (confirm && PromptHidden("Toista tunnuslause: ") != first)
+        {
+            throw new ArgumentException("Tunnuslauseet eivät täsmää.");
+        }
+
+        return first;
+    }
+
+    private static string PromptHidden(string prompt)
+    {
+        Console.Error.Write(prompt);
+        var text = new StringBuilder();
+        while (true)
+        {
+            var key = Console.ReadKey(intercept: true);
+            if (key.Key == ConsoleKey.Enter)
+            {
+                break;
+            }
+
+            if (key.Key == ConsoleKey.Backspace)
+            {
+                if (text.Length > 0)
+                {
+                    text.Length--;
+                }
+            }
+            else if (!char.IsControl(key.KeyChar))
+            {
+                text.Append(key.KeyChar);
+            }
+        }
+
+        Console.Error.WriteLine();
+        return text.ToString();
     }
 
     /// <summary>

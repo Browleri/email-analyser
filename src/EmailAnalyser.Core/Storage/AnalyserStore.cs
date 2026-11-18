@@ -380,6 +380,132 @@ public sealed class AnalyserStore : IDisposable
         cmd.ExecuteNonQuery();
     }
 
+    /// <summary>All labels with the identifiers needed to find their messages again (no subjects, senders or assessments).</summary>
+    public IReadOnlyList<ExportedLabel> ExportLabels()
+    {
+        using var cmd = Command("""
+            SELECT m.store_id, m.entry_id, m.internet_message_id, m.mailbox, m.folder_path, m.received_utc,
+                   l.action, l.urgency, l.topic, l.deadline, l.agrees_with_ai, l.split, l.blind, l.labeled_utc
+            FROM labels l JOIN messages m ON m.id = l.message_id
+            ORDER BY l.labeled_utc
+            """);
+        using var r = cmd.ExecuteReader();
+        var result = new List<ExportedLabel>();
+        while (r.Read())
+        {
+            result.Add(new ExportedLabel(
+                r.GetString(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2), r.GetString(3), r.GetString(4),
+                ParseUtc(r.GetString(5)), r.GetString(6), r.GetString(7), r.GetString(8),
+                r.IsDBNull(9) ? null : DateOnly.ParseExact(r.GetString(9), "yyyy-MM-dd", CultureInfo.InvariantCulture),
+                r.GetInt32(10) == 1, r.GetString(11), r.GetInt32(12) == 1, ParseUtc(r.GetString(13))));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Restores exported labels in one transaction. A message is found by its reference,
+    /// then by a unique Message-ID in the same store; a missing one is queued as a reference
+    /// so that it is read from Outlook and assessed again. A label newer than the exported
+    /// one is kept, and the exported split is kept so a message never moves between parts.
+    /// </summary>
+    public LabelImportResult ImportLabels(IReadOnlyList<ExportedLabel> labels, DateTimeOffset now)
+    {
+        int imported = 0, created = 0, keptNewer = 0, rejected = 0;
+        using var tx = _db.BeginTransaction();
+        foreach (var label in labels)
+        {
+            if (!LabelBackup.IsValid(label))
+            {
+                rejected++;
+                continue;
+            }
+
+            var messageId = FindMessage(label, tx);
+            if (messageId is null)
+            {
+                using var insert = Command("""
+                    INSERT INTO messages
+                        (store_id, entry_id, mailbox, folder_path, internet_message_id, received_utc, status, discovered_utc, updated_utc)
+                    VALUES ($store, $entry, $mailbox, $folder, $mid, $received, 'queued', $now, $now)
+                    RETURNING id
+                    """, tx);
+                insert.Parameters.AddWithValue("$store", label.StoreId);
+                insert.Parameters.AddWithValue("$entry", label.EntryId);
+                insert.Parameters.AddWithValue("$mailbox", label.Mailbox);
+                insert.Parameters.AddWithValue("$folder", label.FolderPath);
+                insert.Parameters.AddWithValue("$mid", (object?)label.InternetMessageId ?? DBNull.Value);
+                insert.Parameters.AddWithValue("$received", Utc(label.Received));
+                insert.Parameters.AddWithValue("$now", Utc(now));
+                messageId = Convert.ToInt64(insert.ExecuteScalar(), CultureInfo.InvariantCulture);
+                created++;
+            }
+
+            using (var existing = Command("SELECT labeled_utc FROM labels WHERE message_id = $id", tx))
+            {
+                existing.Parameters.AddWithValue("$id", messageId);
+                if (existing.ExecuteScalar() is string labeledUtc && ParseUtc(labeledUtc) >= label.LabeledAt)
+                {
+                    keptNewer++;
+                    continue;
+                }
+            }
+
+            using var upsert = Command("""
+                INSERT INTO labels (message_id, action, urgency, topic, deadline, agrees_with_ai, assessment_id, split, blind, labeled_utc)
+                VALUES ($id, $action, $urgency, $topic, $deadline, $agrees, NULL, $split, $blind, $labeled)
+                ON CONFLICT (message_id) DO UPDATE SET action = excluded.action, urgency = excluded.urgency, topic = excluded.topic,
+                    deadline = excluded.deadline, agrees_with_ai = excluded.agrees_with_ai, assessment_id = NULL,
+                    blind = excluded.blind, labeled_utc = excluded.labeled_utc
+                """, tx);
+            upsert.Parameters.AddWithValue("$id", messageId);
+            upsert.Parameters.AddWithValue("$action", label.Action);
+            upsert.Parameters.AddWithValue("$urgency", label.Urgency);
+            upsert.Parameters.AddWithValue("$topic", label.Topic);
+            upsert.Parameters.AddWithValue("$deadline", (object?)label.Deadline?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? DBNull.Value);
+            upsert.Parameters.AddWithValue("$agrees", label.AgreesWithAi ? 1 : 0);
+            upsert.Parameters.AddWithValue("$split", label.Split);
+            upsert.Parameters.AddWithValue("$blind", label.Blind ? 1 : 0);
+            upsert.Parameters.AddWithValue("$labeled", Utc(label.LabeledAt));
+            upsert.ExecuteNonQuery();
+            imported++;
+        }
+
+        tx.Commit();
+        return new LabelImportResult(imported, created, keptNewer, rejected);
+    }
+
+    private long? FindMessage(ExportedLabel label, SqliteTransaction tx)
+    {
+        using (var byReference = Command("SELECT id FROM messages WHERE store_id = $store AND entry_id = $entry", tx))
+        {
+            byReference.Parameters.AddWithValue("$store", label.StoreId);
+            byReference.Parameters.AddWithValue("$entry", label.EntryId);
+            if (byReference.ExecuteScalar() is long id)
+            {
+                return id;
+            }
+        }
+
+        if (label.InternetMessageId is null)
+        {
+            return null;
+        }
+
+        // Message-ID can repeat in copies, so it is used only when it is unique in the store.
+        using var byMessageId = Command("SELECT id FROM messages WHERE store_id = $store AND internet_message_id = $mid LIMIT 2", tx);
+        byMessageId.Parameters.AddWithValue("$store", label.StoreId);
+        byMessageId.Parameters.AddWithValue("$mid", label.InternetMessageId);
+        using var r = byMessageId.ExecuteReader();
+        var ids = new List<long>();
+        while (r.Read())
+        {
+            ids.Add(r.GetInt64(0));
+        }
+
+        return ids.Count == 1 ? ids[0] : null;
+    }
+
     /// <summary>Queues labelled messages again, e.g. to measure a new prompt. Labels are kept.</summary>
     public int RequeueLabeled(string? split, DateTimeOffset now)
     {

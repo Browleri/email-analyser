@@ -1,6 +1,6 @@
 # Tietoturvan arviointi
 
-Paikallinen AI-avustaja Classic Outlookiin. Arvio tehtiin 17.11.2026 vaiheiden 0–3 toteutuksesta, ja se päivitettiin samana päivänä vaiheen 5 (jatkuva seuranta ja Outlook-luokkien kirjoitus) jälkeen. Arvio kattaa haaran `feature/outlook-ai` ja ajoympäristön koti-pc. Arvio päivitetään ennen käyttöönottoa (vaihe 6) ja aina, kun sovellukseen lisätään verkkoyhteys, työkaluja tai kirjoitusoikeus.
+Paikallinen AI-avustaja Classic Outlookiin. Arvio tehtiin 17.11.2026 vaiheiden 0–3 toteutuksesta, ja se päivitettiin samana päivänä vaiheen 5 (jatkuva seuranta ja Outlook-luokkien kirjoitus) jälkeen sekä 18.11.2026 merkintöjen viennin jälkeen (R34, R35). Arvio kattaa haaran `feature/outlook-ai` ja ajoympäristön koti-pc. Arvio päivitetään ennen käyttöönottoa (vaihe 6) ja aina, kun sovellukseen lisätään verkkoyhteys, työkaluja tai kirjoitusoikeus.
 
 ## Yhteenveto
 
@@ -14,7 +14,7 @@ Injektio voi siis saada viestin näyttämään vähemmän tai enemmän tärkeäl
 
 Vaihe 5 lisäsi ainoan kirjoitusoikeuden: sovellus voi lisätä ja poistaa M365-viesteistä neljä omaa `AI:`-luokkaansa. Kirjoitus on oletuksena pois päältä. Luokka valitaan kiinteästä taulukosta, ja ohjailuyritys tai epäonnistunut lähettäjän tunnistus johtaa aina luokkaan `AI: Tarkista`. Kohde tarkistetaan Message-ID:n ja sisältötiivisteen perusteella, ja jokainen muutos voidaan palauttaa. Mallin tekstiä ei kirjoiteta Outlookiin.
 
-Arvioinnissa löytyi toteutuksesta kymmenen korjattavaa kohtaa (F1–F10) ja vaiheen 5 toteutuksessa kuusi lisää (F11–F16). Ne on korjattu ja testattu. Käyttöliittymän arvioinnissa löytyi vielä kaksi: sokkomerkintä piilotti huijausvaroituksen (F17), ja ilman valintaa näkymä näytti varoitukset aiheettomasti (F18). Vakavimmat olivat:
+Arvioinnissa löytyi toteutuksesta kymmenen korjattavaa kohtaa (F1–F10) ja vaiheen 5 toteutuksessa kuusi lisää (F11–F16). Ne on korjattu ja testattu. Käyttöliittymän arvioinnissa löytyi vielä kaksi: sokkomerkintä piilotti huijausvaroituksen (F17), ja ilman valintaa näkymä näytti varoitukset aiheettomasti (F18). Suunnitelman katselmoinnissa puuttui merkintöjen vienti (F19). Vakavimmat olivat:
 - hyökkäystestauksessa malli totteli viestiin upotettua väärennettyä järjestelmäohjetta, ja maksuhuijaus luokiteltiin "tehtävä tänään" -viestiksi (F10). Nyt ohjailua sisältävä viesti ohjataan aina tarkistettavaksi,
 - yksittäinen viesti pystyi pysäyttämään koko käsittelyn (F1),
 - LM Studion kehotteiden lokitus olisi voinut palata päälle huomaamatta (F8),
@@ -31,6 +31,7 @@ Kaksi korkeaa riskiä on sovelluksen ulkopuolella ja vaatii käyttäjän päät�
 | Viestien sisältö | Outlookin OST-välimuisti, sovelluksen muisti käsittelyn ajan | Luottamukselliset työ-, sijoitus- ja henkilötiedot |
 | Arviot ja metatiedot | Salattu `analyser.db`: otsikot, lähettäjät, yhteenvedot ja perustelut, joissa voi olla lainauksia | Paljastaa viestien sisältöä tiivistetysti |
 | Tietokanta-avain | `database.key`, suojattu DPAPI:lla käyttäjälle `kortt` | Avaa tietokannan |
+| Käyttäjän merkinnät | Salattu `analyser.db` ja käyttäjän tekemä vientitiedosto | Ainoa tieto, jota ei voi tuottaa uudelleen; laatumittaus perustuu niihin |
 | Outlookin kirjoitusoikeus | Käyttäjän Outlook-istunto COM-rajapinnan kautta | Sovellus voisi teknisesti lähettää, poistaa tai muuttaa viestejä |
 | Käyttäjän luottamus arvioihin | Näkymä, myöhemmin Outlook-luokat | Väärä arvio voi johtaa vääriin toimiin tai unohtuneeseen viestiin |
 | Näytönohjain ja mallipalvelin | LM Studio, jota käyttävät myös Prompter ja Ullis | Saatavuus |
@@ -46,6 +47,8 @@ flowchart LR
     L -->|JSON-arvio<br/>EI LUOTETTU| A
     A -->|salattu| D[(analyser.db)]
     D --> U[WPF-näkymä]
+    D -->|export-labels: tunnisteet ja merkinnät<br/>tunnuslause, AES-GCM| E[(Vientitiedosto<br/>käyttäjän valitsema kansio)]
+    E -->|import-labels| D
     A -->|vain omat AI-luokat, kiinteä taulukko<br/>Message-ID ja tiiviste tarkistettu<br/>oletuksena pois| O
     LAN[Lähiverkon laitteet] -->|todentamaton API<br/>0.0.0.0:1234| L
     C[Claude Code -istunto] -->|komentojen tuloste| CL[Pilvipalvelu]
@@ -104,6 +107,8 @@ Todennäköisyys (T) ja vaikutus (V) ovat asteikolla 1–3. Taso on T × V: 1–
 | R18 | **Varmuuskopiointi pilveen.** Tietokanta lisätään myöhemmin restic-varmuuskopioihin, joista taso 3 menee Cloudflare R2:een. | Tietokanta ei kuulu varmuuskopioihin. | 2×2=4 | 1×2=2 | Jos lisätään: vain lähiverkon tasot, kuten Kertaus-palvelussa |
 | R19 | **Säilytys.** Arviot kertyvät tietokantaan pysyvästi, vaikka suunnitelman oletus on 90 päivää. | Vaihe 5: seuranta poistaa kerran vuorokaudessa yli 90 päivää vanhat viestit arvioineen (`ApplyRetention`). Merkityistä viesteistä ja viesteistä, joissa on sovelluksen luokka, säilytetään vain tunnisteet ja luokat; otsikko, lähettäjä, yhteenveto ja perustelu poistetaan. `secure_delete` ylikirjoittaa poistetut rivit (F15). | 3×1=3 | 1×1=1 | – |
 | R33 | **Näkymän kuvakaappaukset kehitysistuntoon.** Agentti arvioi käyttöliittymää kuvakaappauksista, jotka lähtevät pilveen samoin kuin komentojen tuloste (R11). Peittämätön kuva paljastaisi otsikot, lähettäjät, laatikoiden osoitteet ja mallin yhteenvedot. | `--screenshots` pakottaa peitetyn tilan ja jättää seurannan pois. Peitetty tila korvaa otsikot, lähettäjät, laatikot, yhteenvedot, perustelut ja ongelmatekstit paikkamerkeillä (`DisplayMask`). Ennen jokaista kuvaa `Screenshots` vertaa ikkunan kaikkia tekstejä ja vihjeitä oikeiden tekstien alkuihin; osumasta yksikin estää tallennuksen, poistaa ajon aiemmat kuvat ja kirjoittaa vain kentän tyypin ja pituuden. Kuva piirretään ikkunan sisällöstä, ei näytöltä, joten muut ikkunat eivät päädy siihen. CLAUDE.md kieltää kuvaamasta peittämätöntä näkymää. | 3×3=9 | 1×2=2 | Paljastuu yhä rakenne: tekstien pituudet, saapumisajat, mallin luokat ja se, mitkä rivit ovat samalta lähettäjältä. |
+| R34 | **Merkintöjen vientitiedosto.** Vienti jättää salatun tietokannan, ja tiedosto voi päätyä muistitikulle, pilvikansioon tai varmuuskopioon. Siinä ovat laatikoiden nimet, kansiopolut, Outlook-tunnisteet, Message-ID:t, saapumisajat ja käyttäjän merkinnät. | Tiedosto salataan tunnuslauseesta johdetulla avaimella (PBKDF2-SHA256, 600 000 kierrosta, satunnainen suola) ja AES-256-GCM:llä. Otsake, kierrosmäärä mukaan lukien, on todennettu, joten sitä ei voi heikentää huomaamatta. Tunnuslauseessa on oltava vähintään 12 merkkiä, ja se luetaan kaiuttamatta tai ympäristömuuttujasta, ei komentoriviltä. Otsikoita, lähettäjiä, yhteenvetoja ja perusteluja ei viedä. Vienti kieltäytyy OneDrive-kansiosta ilman valitsinta `--allow-cloud`, ja tulosteessa ovat vain määrät. Tiedosto luetaan takaisin ennen tallennusta. | 2×2=4 | 1×2=2 | Heikko tunnuslause on käyttäjän riski. Jos tiedosto lisätään resticiin, se ei saa mennä tasolle 3 ilman päätöstä (R18). |
+| R35 | **Merkintöjen menetys.** DPAPI-avain katoaa (ylläpitäjän salasanan nollaus tai uusi Windows-asennus) tai levy hajoaa. Tietokanta luodaan uudelleen, ja merkintätyö ja arviointiosan mittaus menetetään. | `export-labels` ja `import-labels`. Tuonti löytää viestin viitteellä tai yksiselitteisellä Message-ID:llä, ja puuttuvat viestit se lisää jonoon arvioitaviksi uudelleen. Viedyn merkinnän säätö- tai arviointiosa säilyy, joten viesti ei vaihda osaa. Tietokannan uudempaa merkintää ei korvata. Tuonnin arvot tarkistetaan sallittuja arvoja vasten, eikä tuonti kirjoita Outlookiin. | 2×3=6 | 2×1=2 | Suojaa vain, jos käyttäjä vie merkinnät merkintäkierrosten jälkeen. Myöhemmin: muistutus näkymään. |
 
 ### C. Saatavuus
 
@@ -155,6 +160,7 @@ Todennäköisyys (T) ja vaikutus (V) ovat asteikolla 1–3. Taso on T × V: 1–
 | F16 | Koeajossa "Käsittele nyt" jätti herätteen odottamaan, joten seuraava erä alkoi heti ilman taukoa, eikä näytönohjain vapautunut erien välillä (R22, R23) | Kierros kuluttaa odottavan herätteen alussa | `Process_now_runs_one_round_and_then_waits_for_the_interval` |
 | F17 | Käyttöliittymän arvioinnissa: huijaus- ja ohjailuvaroitus olivat AI-arvion laatikossa, joten sokkomerkintä piilotti ne, eikä listassa näkynyt varoitusta lainkaan (R1, R2) | Varoitukset näytetään AI-arvion ulkopuolella myös sokkotilassa. Listassa on varoitussarake ja punainen rivi, ja oletussuodatin "Vaatii huomiota" sisältää varoitetut viestit. Varoitus voi ohjata sokkomerkintää kohti "tarkista", mutta huijausvaroitus on tärkeämpi kuin puolueeton merkintä | Käännös; näkymän tarkistus käsin |
 | F18 | Kuvakaappauksista: kun mitään viestiä ei ollut valittuna, paneeli näytti sekä huijaus- että ohjailuvaroituksen ja tyhjän AI-arvion, koska sidonta ilman dataa jätti ne näkyviin. Aiheeton varoitus opettaa ohittamaan varoitukset (R2) | Paneelin sisältö näytetään vain, kun viesti on valittuna; muuten näkyy ohje "Valitse viesti listasta" | Peitetyt kuvakaappaukset (`--screenshots`) |
+| F19 | Suunnitelman lupaamaa merkintöjen vientiä ei ollut, vaikka `AppData\Local` ei kuulu varmuuskopioihin ja DPAPI-avain voi kadota (R35) | `export-labels` ja `import-labels`, `LabelBackup` (R34) | `LabelBackupTests` (8): tiedostossa ei selväkielisiä tunnisteita, väärä tunnuslause ja muutettu otsake hylätään, viitteen ja Message-ID:n täsmäys, monitulkintainen Message-ID, uudemman merkinnän säilyminen, osan säilyminen ja sallimattomat arvot; komentorivi kokeiltu keinotekoisella aineistolla väliaikaista tietokantaa vasten |
 
 ## Hyökkäystapausten tulokset
 
@@ -209,6 +215,8 @@ Ennen kuin luokkien kirjoitus kytketään päälle kaikkiin viesteihin (`categor
 1. Vaiheen 3 löytymisosuus ja turhat hälytykset mitataan käyttäjän merkinnöistä (R31).
 2. Käyttäjä tarkistaa kaksi `dmarc_fail`-osumaa: jos ne ovat aitoja uutiskirjeitä, arvioidaan signaalin rajaus (R2).
 3. Käyttäjä tekee seurannan käsikokeet: lepotila, Outlookin sulkeminen ja uudelleenkäynnistys, verkkokatko, LM Studion uudelleenkäynnistys sekä viestin siirto toiseen kansioon kesken jonon (suunnitelman vaihe 5).
+
+Merkintätyön aikana: käyttäjä vie merkinnät (`export-labels`) jokaisen merkintäkierroksen jälkeen paikalliseen kansioon ja säilyttää tunnuslauseen salasanojen hallinnassa (R35).
 
 Käyttäjän päätettävät, sovelluksen ulkopuoliset:
 - **R14:** Codex-hiekkalaatikon lukuoikeus `AppData\Local`-kansioon (OST-tiedostot).

@@ -185,7 +185,11 @@ Koneen levyjä ei ole salattu, joten tietokanta salataan sovelluksessa.
 
 Säilytysaika on säädettävä, oletus 90 päivää; käyttäjä voi poistaa paikalliset arviot. Tietokantahakemisto on käyttäjäkohtainen ja suojattu Windows-käyttöoikeuksilla.
 
-Käyttäjän `AppData\Local` ei kuulu koneen restic-varmuuskopioihin. Arviot ovat uudelleen tuotettavissa, mutta käyttäjän korjaukset ja merkitty arviointiotos eivät ole. Ensimmäisessä versiossa tietokantaa ei varmuuskopioida. Sovellus tarjoaa korjausten ja arviointiotoksen viennin salattuun tiedostoon. Jos varmuuskopiointi myöhemmin lisätään, noudatetaan Kertaus-palvelun käytäntöä: kopio pidetään lähiverkon varmuuskopiotasoilla, eikä sitä viedä tasoille 2 ja 3 (pilvikopio) ilman erillistä päätöstä.
+Käyttäjän `AppData\Local` ei kuulu koneen restic-varmuuskopioihin. Arviot ovat uudelleen tuotettavissa, mutta käyttäjän korjaukset ja merkitty arviointiotos eivät ole. Ensimmäisessä versiossa tietokantaa ei varmuuskopioida. Sovellus tarjoaa korjausten ja arviointiotoksen viennin salattuun tiedostoon (toteutettu 18.11.2026):
+- `email-analyser export-labels --out <tiedosto>` vie merkinnät ja niiden viestien tunnisteet (laatikko, kansio, Outlook-tunnisteet, Message-ID ja saapumisaika). Otsikoita, lähettäjiä ja arvioita ei viedä, koska viestit voi lukea Outlookista ja arvioida uudelleen.
+- Tiedosto salataan tunnuslauseella, ei DPAPI:lla, jotta se aukeaa myös uudella Windows-asennuksella. Avain johdetaan PBKDF2-SHA256:lla, ja salaus on AES-256-GCM. Vienti kieltäytyy OneDrive-kansiosta ilman valitsinta `--allow-cloud`.
+- `email-analyser import-labels <tiedosto>` palauttaa merkinnät. Viesti löytyy viitteellä tai yksiselitteisellä Message-ID:llä, ja puuttuva viesti lisätään jonoon arvioitavaksi uudelleen. Merkinnän säätö- tai arviointiosa säilyy, ja tietokannan uudempi merkintä jää voimaan.
+- Käyttäjä vie merkinnät jokaisen merkintäkierroksen jälkeen. Vientitiedoston paikka ja sen mahdollinen lisääminen restic-varmuuskopioihin päätetään käyttöönoton yhteydessä. Jos varmuuskopiointi myöhemmin lisätään, noudatetaan Kertaus-palvelun käytäntöä: kopio pidetään lähiverkon varmuuskopiotasoilla, eikä sitä viedä tasoille 2 ja 3 (pilvikopio) ilman erillistä päätöstä.
 
 ## Toteutusvaiheet ja hyväksymisehdot
 
@@ -343,11 +347,13 @@ Toteutusjärjestys:
 
 Kohdat 1–2 tehdään ennen otoksen merkintää ja luokkien kytkemistä päälle, koska ne vaikuttavat siihen, mitä käyttäjä näkee huomiota vaativina. Muutokset eivät lisää verkkoyhteyksiä tai Outlook-kirjoituksia, joten tietoturva-arviota ei tarvitse päivittää.
 
-Jäljellä vaiheessa 3: toteutusjärjestyksen kohdat 1–2, minkä jälkeen käyttäjä merkitsee otoksen näkymässä. Sitten löytymisosuus ja turhat hälytykset mitataan arviointiosasta, ja jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
+Merkintöjen vienti ja tuonti toteutettiin 18.11.2026 ennen otoksen merkintää (ks. Säilytys ja varmuuskopiointi, tietoturva-arvion R34–R35).
+
+Jäljellä vaiheessa 3: toteutusjärjestyksen kohdat 1–2, minkä jälkeen käyttäjä merkitsee otoksen näkymässä ja vie merkinnät jokaisen kierroksen jälkeen. Sitten löytymisosuus ja turhat hälytykset mitataan arviointiosasta, ja jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
 
 ### 4. Tietoturvan arviointi
 
-Sähköpostin sisältö on hyökkääjän hallitsemaa syötettä, ja se kulkee kielimallin kautta käyttäjän näkymään ja myöhemmin Outlook-luokkiin. Ennen kuin sovellus kirjoittaa Outlookiin tai otetaan jatkuvaan käyttöön, riskit arvioidaan järjestelmällisesti ja toteutus käydään läpi niiden kannalta. Arvio on tiedostossa [docs/tietoturva-arvio.md](docs/tietoturva-arvio.md). Siinä ovat suojattavat kohteet, tietovirrat ja luottamusrajat, hyökkääjät, riskirekisteri (nyt R1–R33) todennäköisyyksineen ja vaikutuksineen, toteutuksesta löydetyt puutteet (nyt F1–F18) sekä avoimet toimenpiteet.
+Sähköpostin sisältö on hyökkääjän hallitsemaa syötettä, ja se kulkee kielimallin kautta käyttäjän näkymään ja myöhemmin Outlook-luokkiin. Ennen kuin sovellus kirjoittaa Outlookiin tai otetaan jatkuvaan käyttöön, riskit arvioidaan järjestelmällisesti ja toteutus käydään läpi niiden kannalta. Arvio on tiedostossa [docs/tietoturva-arvio.md](docs/tietoturva-arvio.md). Siinä ovat suojattavat kohteet, tietovirrat ja luottamusrajat, hyökkääjät, riskirekisteri (nyt R1–R35) todennäköisyyksineen ja vaikutuksineen, toteutuksesta löydetyt puutteet (nyt F1–F19) sekä avoimet toimenpiteet.
 
 Tila 17.11.2026: arvio on tehty, ja puutteet F1–F10 on korjattu ja testattu. Hyökkäystesti paljasti, että malli totteli väärennettyä erotinta ja roolileikkiä. Siksi ohjelma pakottaa nyt toimenpiteeksi "tarkista" aina, kun viestissä havaitaan ohjailuyritys (F10). Korjauksen jälkeen kaikki kuusi hyökkäystapausta päätyivät tarkistettaviksi, eikä 192 oikeasta viestistä yksikään osunut heuristiikkaan. Sovelluksen ulkopuoliset riskit R13–R16 odottavat käyttäjän päätöstä, ja vaiheen 5 kirjoitusvaatimukset ovat arvion kohdassa "Avoimet toimenpiteet".
 
