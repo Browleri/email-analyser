@@ -153,7 +153,7 @@ internal static class Program
         using var outlook = new OutlookMailbox();
         using var lmStudio = new LmStudioClient(settings.LmStudioUrl, TimeSpan.FromMinutes(5));
         using var a1111 = new Automatic1111Probe(settings.Automatic1111Url);
-        var classifier = new Classifier(lmStudio, PromptTemplate.LoadEmbedded(), settings.ToClassifierOptions());
+        var classifier = new Classifier(lmStudio, PromptTemplate.LoadEmbedded(settings.UserContext), settings.ToClassifierOptions());
         var runner = new BatchRunner(store, lmStudio, a1111, outlook, classifier, TimeProvider.System, new NvidiaSmiProbe(), new LmStudioPrivacyCheck(), settings.ToIdentityCheck());
         Console.WriteLine($"Malli {settings.Model}, kehote {classifier.Prompt.Version}");
 
@@ -187,7 +187,7 @@ internal static class Program
         using var outlook = new OutlookMailbox();
         using var lmStudio = new LmStudioClient(settings.LmStudioUrl, TimeSpan.FromMinutes(5));
         using var a1111 = new Automatic1111Probe(settings.Automatic1111Url);
-        var classifier = new Classifier(lmStudio, PromptTemplate.LoadEmbedded(), settings.ToClassifierOptions());
+        var classifier = new Classifier(lmStudio, PromptTemplate.LoadEmbedded(settings.UserContext), settings.ToClassifierOptions());
         var runner = new BatchRunner(store, lmStudio, a1111, outlook, classifier, TimeProvider.System, new NvidiaSmiProbe(), new LmStudioPrivacyCheck(), settings.ToIdentityCheck());
         // Settings are re-read every round, so "categories mode" takes effect without a restart.
         var monitor = new MonitorService(store, outlook, runner, new CategorySync(store, outlook, TimeProvider.System),
@@ -339,6 +339,11 @@ internal static class Program
         PrintCounts("Aihe", r.ByTopic);
         PrintCounts("Tarkistuksen syyt", r.ReviewReasons);
         PrintCounts("Laatikko", r.ByMailbox);
+        foreach (var group in store.GetReviewItems().Where(i => i.Assessment is not null).GroupBy(i => i.Mailbox).OrderBy(g => g.Key))
+        {
+            PrintCounts($"  Aihe, {group.Key}", group.GroupBy(i => i.Assessment!.Topic).ToDictionary(g => g.Key, g => g.Count()));
+        }
+
         Console.WriteLine($"Kesto / viesti: mediaani {Percentile(r.DurationsMs, 0.5) / 1000.0:0.0} s, " +
                           $"90 % {Percentile(r.DurationsMs, 0.9) / 1000.0:0.0} s, enintään {(r.DurationsMs.Count == 0 ? 0 : r.DurationsMs.Max()) / 1000.0:0.0} s");
         Console.WriteLine($"Tokenit / viesti: syöte mediaani {Percentile(r.PromptTokens.Select(x => (long)x).ToList(), 0.5)}, " +
@@ -355,7 +360,7 @@ internal static class Program
         var set = EvalSet.Load(file);
         using var lmStudio = new LmStudioClient(settings.LmStudioUrl, TimeSpan.FromMinutes(5));
         using var a1111 = new Automatic1111Probe(settings.Automatic1111Url);
-        var prompt = PromptTemplate.LoadEmbedded();
+        var prompt = PromptTemplate.LoadEmbedded(set.UserContext);
         var runner = new EvalRunner(lmStudio, a1111, prompt, settings.ToClassifierOptions(), new NvidiaSmiProbe());
         Console.WriteLine($"Testiviestejä {set.Cases.Count}, kehote {prompt.Version}");
 
@@ -404,6 +409,8 @@ internal static class Program
                           $"aihe {r.TopicCorrect}/{r.Assessed}, määräaika {r.DeadlineCorrect}/{r.Assessed}.");
         Console.WriteLine($"AI täysin samaa mieltä: sokkona merkityistä {r.AgreeBlind}/{r.LabeledBlind}, arvio näkyvillä {r.AgreeSeen}/{r.LabeledSeen}.");
         Console.WriteLine($"Kehoteversiot: {string.Join(", ", r.PromptVersions.Select(kv => $"{kv.Key} {kv.Value}"))}");
+        PrintCounts("Merkinnän aihe", r.LabelTopics);
+        PrintCounts("Aihe-erot (merkintä → AI)", r.TopicMismatches);
         if (r.MissedMessageIds.Count > 0)
         {
             Console.WriteLine($"Huomiotta jääneiden viestien tunnisteet (näkymän suodatin \"Huomiotta jääneet\"): {string.Join(", ", r.MissedMessageIds)}");
@@ -425,6 +432,8 @@ internal static class Program
         var withHeader = new Dictionary<string, int>();
         var totals = new Dictionary<string, int>();
         var signals = new Dictionary<string, int>();
+        var rules = new Dictionary<string, int>();
+        var places = new Dictionary<string, int>();
         foreach (var item in store.GetReviewItems())
         {
             var read = await outlook.ReadAsync(item.Reference, item.Mailbox, CancellationToken.None);
@@ -434,9 +443,16 @@ internal static class Program
             }
 
             totals[item.Mailbox] = totals.GetValueOrDefault(item.Mailbox) + 1;
-            if (InjectionHeuristics.Detect(m.Subject + "\n" + m.Body))
+            var text = m.Subject + "\n" + m.Body;
+            if (InjectionHeuristics.Find(text) is { } match)
             {
+                // Rule and rough position only; the matched text is message content.
                 hits[item.Mailbox] = hits.GetValueOrDefault(item.Mailbox) + 1;
+                var rule = InjectionHeuristics.RuleNames[match.Rule];
+                rules[rule] = rules.GetValueOrDefault(rule) + 1;
+                var place = match.Index < (m.Subject?.Length ?? 0) ? "otsikko"
+                    : (match.Index * 3L / Math.Max(1, text.Length)) switch { 0 => "rungon alkuosa", 1 => "rungon keskiosa", _ => "rungon loppuosa" };
+                places[place] = places.GetValueOrDefault(place) + 1;
             }
 
             var sender = SenderAuthentication.Evaluate(m.SenderName, m.SenderAddress, m.Headers);
@@ -463,6 +479,8 @@ internal static class Program
 
         Console.WriteLine($"Ohjailuheuristiikka osui {hits.Values.Sum()} viestiin, lähettäjäsignaali {senderHits.Values.Sum()} viestiin, " +
                           $"yhteensä {totals.Values.Sum()} viestiä.");
+        PrintCounts("Ohjailusäännöt", rules);
+        PrintCounts("Osuman kohta", places);
         PrintCounts("Lähettäjäsignaalit", signals);
         return 0;
     }

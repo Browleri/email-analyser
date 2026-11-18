@@ -8,12 +8,18 @@ yhteenveto: 1–2 virkettä suomeksi siitä, mitä viesti koskee ja mitä vastaa
 
 perustelu: lyhyt syy valitulle toimenpiteelle ja kiireellisyydelle. Lainaa tarvittaessa ratkaiseva lyhyt tekstikohta.
 
-aihe:
-- tyo: työtehtävät, asiakkaat, kollegat, projektit ja kokoukset
-- sijoitukset: rahastot, osakkeet, pääomakutsut, sijoitusraportit ja salkut
-- hallinto: laskut, maksut, sopimukset, viranomaiset, pankki, käyttäjätilit ja tietoturvailmoitukset
+aihe: viestin asia, ei muoto. Esimerkiksi markkinakatsaus on markkinat ja kohdeyhtiön sijoittajakirje kohdeyhtiot, vaikka ne olisi lähetetty uutiskirjeenä. Käytä käyttäjän antamaa taustaa sijoittajatahon ja kohteiden tunnistamiseen.
+- tyo: työtehtävät, asiakkaat, kollegat, projektit ja kokoukset sekä työyhteisön keskustelut, joissa ihmiset kirjoittavat
+- sijoitukset: vastaanottajan omat sijoitukset, suoraan tai hänen oman sijoitusyhtiönsä kautta, ja niiden tapahtumat: rahastot, osakkeet, välittäjät, pääomakutsut, salkku-, rahasto- ja veroraportit, osakeannit ja toimeksiannot
+- perheyhtio: perheyhtiön sijoitukset ja niiden tapahtumat, kun sijoittajana tai vastaanottajana on perheyhtiö: pääomakutsut, rahasto- ja salkkuraportit
+- kohdeyhtiot: enkelisijoitukset ja listaamattomat kohdeyhtiöt: yhtiön sijoittajakirjeet ja -päivitykset, osakasasiat, yhtiökokoukset, rahoituskierrokset ja vaihtovelkakirjat
+- markkinat: markkinakatsaukset, analyysit, yhtiö- ja toimialaraportit, yrityskauppauutiset, mediaseuranta sekä talous- ja korkonäkymät, myös joukkoviesteinä
+- sijoitusmahdollisuudet: uudet sijoitukset, joihin vastaanottajaa tarjotaan: rahastojen markkinointi, esitteet ja kuukausiraportit rahastoista, joissa hän ei ole mukana, osakeannit ja niiden ehdot sekä muut sijoitustarjoukset
+- tapahtumat: kutsut, ilmoittautumiset, vahvistukset ja muistutukset tilaisuuksista, seminaareista ja tapahtumista
+- hallinto: laskut, maksut, sopimukset, viranomaiset sekä pankki- ja vakuutusasiat
+- ilmoitukset: automaattiset ilmoitukset: kirjautumis- ja vahvistuskoodit, käyttäjätilit ja tilaukset, järjestelmä- ja tietoturvavaroitukset sekä palvelujen ilmoitukset (esimerkiksi GitHub, Teams ja sosiaalinen media)
 - henkilokohtainen: perhe, ystävät, harrastukset ja yksityisasiat
-- uutiskirje: markkinointi, uutiskirjeet, tiedotteet ja muut joukkoviestit
+- uutiskirje: markkinointi, mainokset, kuluttajien uutiskirjeet ja muut joukkoviestit, jotka eivät kuulu edellisiin
 - muu: mikään edellisistä ei sovi
 
 toimenpide:

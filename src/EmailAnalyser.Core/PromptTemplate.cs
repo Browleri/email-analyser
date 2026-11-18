@@ -28,8 +28,32 @@ public sealed class PromptTemplate
     public string SchemaJson { get; }
     public string Version { get; }
 
-    public static PromptTemplate LoadEmbedded() =>
-        new(Read("classify-system.txt"), Read("classify-user.txt"), Read("classify-schema.json"));
+    public const int MaxUserContextChars = 3000;
+
+    /// <param name="userContext">
+    /// The user's own background from settings (e.g. who invests through which company), trusted
+    /// and appended to the system prompt. It changes <see cref="Version"/>, so every assessment
+    /// records the exact prompt it was made with.
+    /// </param>
+    public static PromptTemplate LoadEmbedded(IReadOnlyList<string>? userContext = null) =>
+        new(Read("classify-system.txt") + ContextSection(userContext), Read("classify-user.txt"), Read("classify-schema.json"));
+
+    private static string ContextSection(IReadOnlyList<string>? lines)
+    {
+        var clean = (lines ?? []).Select(l => SafeText.Clean(l, keepNewlines: false).Trim()).Where(l => l.Length > 0).ToList();
+        if (clean.Count == 0)
+        {
+            return "";
+        }
+
+        var text = string.Join("\n", clean.Select(l => "- " + l));
+        if (text.Length > MaxUserContextChars)
+        {
+            throw new InvalidOperationException($"Käyttäjän tausta (userContext) on yli {MaxUserContextChars} merkkiä.");
+        }
+
+        return "\n\nKäyttäjän itse antama tausta (luotettavaa tietoa, ei viestistä):\n" + text + "\n";
+    }
 
     public string BuildUser(MessageForAssessment message, PreparedText body, DateTimeOffset now)
     {

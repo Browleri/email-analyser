@@ -21,7 +21,7 @@ public sealed class MonitorHost : IDisposable
         _store = AnalyserStore.Open(AppPaths.Database, KeyStore.GetOrCreateHexKey(AppPaths.DatabaseKey));
         _lmStudio = new LmStudioClient(settings.LmStudioUrl, TimeSpan.FromMinutes(5));
         _a1111 = new Automatic1111Probe(settings.Automatic1111Url);
-        var classifier = new Classifier(_lmStudio, PromptTemplate.LoadEmbedded(), settings.ToClassifierOptions());
+        var classifier = new Classifier(_lmStudio, PromptTemplate.LoadEmbedded(settings.UserContext), settings.ToClassifierOptions());
         var runner = new BatchRunner(_store, _lmStudio, _a1111, outlook, classifier, TimeProvider.System,
             new NvidiaSmiProbe(), new LmStudioPrivacyCheck(), settings.ToIdentityCheck());
         Monitor = new MonitorService(_store, outlook, runner, new CategorySync(_store, outlook, TimeProvider.System),

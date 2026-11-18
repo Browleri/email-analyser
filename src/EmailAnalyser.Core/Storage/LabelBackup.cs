@@ -24,7 +24,8 @@ public sealed record ExportedLabel(
     bool AgreesWithAi,
     string Split,
     bool Blind,
-    DateTimeOffset LabeledAt);
+    DateTimeOffset LabeledAt,
+    string? Note = null);
 
 /// <summary>
 /// <paramref name="Imported"/> labels were written; <paramref name="NewMessages"/> of them

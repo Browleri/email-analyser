@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
+using EmailAnalyser.Core;
 
 namespace EmailAnalyser.App;
 
@@ -20,6 +21,13 @@ public partial class MainWindow : Window
         Trace(options, "näkymämalli luotu");
         DataContext = _viewModel;
         Closed += (_, _) => _viewModel.Dispose();
+
+        // The screenshot run never edits, and must never wait for a dialog.
+        if (options.ScreenshotDirectory is null)
+        {
+            _viewModel.AskUnsaved = AskUnsaved;
+            Closing += (_, e) => e.Cancel = !_viewModel.ConfirmLeave();
+        }
 
         SizeChanged += (_, _) => _viewModel.Compact = ActualWidth < 1250;
 
@@ -51,6 +59,28 @@ public partial class MainWindow : Window
     }
 
     private void ClearDeadline_Click(object sender, RoutedEventArgs e) => _viewModel.EditDeadline = null;
+
+    private UnsavedChoice AskUnsaved(bool canSave)
+    {
+        if (!canSave)
+        {
+            // An incomplete label cannot be saved: discard it or stay.
+            return MessageBox.Show(this,
+                "Merkintä on kesken (toimenpide, kiireellisyys tai aihe puuttuu), eikä sitä voi tallentaa.\n\nHylätäänkö muutokset?",
+                "Tallentamaton merkintä", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) == MessageBoxResult.OK
+                ? UnsavedChoice.Discard
+                : UnsavedChoice.Cancel;
+        }
+
+        return MessageBox.Show(this,
+            "Merkintää ei ole tallennettu.\n\nKyllä: tallenna\nEi: hylkää muutokset\nPeruuta: jatka muokkausta",
+            "Tallentamaton merkintä", MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.Yes) switch
+        {
+            MessageBoxResult.Yes => UnsavedChoice.Save,
+            MessageBoxResult.No => UnsavedChoice.Discard,
+            _ => UnsavedChoice.Cancel,
+        };
+    }
 
     /// <summary>WPF has no Finnish resources, so the date picker's hint would read "Select a date".</summary>
     private void DeadlinePicker_Loaded(object sender, RoutedEventArgs e)
@@ -103,7 +133,8 @@ public partial class MainWindow : Window
             await SettleAsync();
             shots.Capture("05-ongelmat-ja-jono");
 
-            _viewModel.Filter = "merkitsematon";
+            // From the attention view: turning blind mode on switches to the unlabelled messages and shows the banner.
+            _viewModel.Filter = "huomio";
             _viewModel.BlindMode = true;
             _viewModel.SelectFirst(_ => true);
             await SettleAsync();

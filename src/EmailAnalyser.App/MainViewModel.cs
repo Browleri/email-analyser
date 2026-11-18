@@ -127,9 +127,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _mailbox = AllMailboxes;
     private bool _blindMode;
     private bool _compact;
-    private string? _editAction, _editUrgency, _editTopic;
-    private DateTime? _editDeadline;
+    private readonly LabelDraft _draft = new();
+    private int _programmaticSelection;
+    private string? _filterBeforeBlind;
     private string _statusList = "", _statusLabels = "", _statusProblems = "";
+    private InjectionExcerpt? _excerpt;
+    private string _excerptInfo = "";
 
     public MainViewModel(AppOptions options)
     {
@@ -139,11 +142,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         View.Filter = o => o is ItemViewModel vm && Matches(vm);
         View.SortDescriptions.Add(new SortDescription(nameof(ItemViewModel.ReceivedSort), ListSortDirection.Descending));
         RefreshCommand = new RelayCommand(Refresh);
-        SaveCommand = new RelayCommand(Save, () => Selected is not null && EditAction is not null && EditUrgency is not null && EditTopic is not null);
+        SaveCommand = new RelayCommand(Save, () => Selected is not null && _draft.CanSave);
         AcceptAiCommand = new RelayCommand(AcceptAi, () => Selected?.ShowAi == true);
         DeleteLabelCommand = new RelayCommand(DeleteLabel, () => Selected?.IsLabeled == true);
         OpenCommand = new RelayCommand(OpenInOutlook, () => Selected is not null);
         ToggleDoneCommand = new RelayCommand(ToggleDone, () => Selected is not null);
+        ShowInjectionCommand = new RelayCommand(ShowInjection, () => Selected?.InjectionSuspected == true && !Masked);
+        StopBlindCommand = new RelayCommand(() => BlindMode = false, () => BlindMode);
         ProcessNowCommand = new RelayCommand(() => _monitor?.Monitor.ProcessNow(), () => _monitor is not null && !MonitorPaused);
         TogglePauseCommand = new RelayCommand(TogglePause, () => _monitor is not null);
         Refresh();
@@ -196,7 +201,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public bool Masked => _mask is not null;
-    public string WindowTitle => Masked ? "Sähköpostiavustaja – peitetty näkymä" : "Sähköpostiavustaja";
+    public string WindowTitle => Masked ? "Seula – peitetty näkymä" : "Seula";
     public bool HasSelection => Selected is not null;
     public bool NoSelection => Selected is null;
     public IReadOnlyList<Option> ActionOptions => Display.Actions;
@@ -209,6 +214,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public RelayCommand DeleteLabelCommand { get; }
     public RelayCommand OpenCommand { get; }
     public RelayCommand ToggleDoneCommand { get; }
+    public RelayCommand StopBlindCommand { get; }
+    public RelayCommand ShowInjectionCommand { get; }
+
+    /// <summary>The passage that triggered the injection warning, read from Outlook on request; never stored.</summary>
+    public InjectionExcerpt? Excerpt
+    {
+        get => _excerpt;
+        private set
+        {
+            if (Set(ref _excerpt, value))
+            {
+                OnPropertyChanged(nameof(HasExcerpt));
+            }
+        }
+    }
+
+    public bool HasExcerpt => Excerpt is { Hit.Length: > 0 };
+    public string ExcerptInfo { get => _excerptInfo; private set => Set(ref _excerptInfo, value); }
     public string DoneButtonText => Selected?.IsDone == true ? "Palauta hoitamattomaksi (Ctrl+E)" : "Merkitse hoidetuksi (Ctrl+E)";
     public RelayCommand ProcessNowCommand { get; }
     public RelayCommand TogglePauseCommand { get; }
@@ -241,10 +264,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _filter;
         set
         {
-            if (Set(ref _filter, value))
+            if (value == _filter || !ConfirmLeave(nameof(Filter)))
             {
-                View.Refresh();
+                return;
             }
+
+            _filter = value;
+            OnPropertyChanged();
+            View.Refresh();
         }
     }
 
@@ -253,24 +280,49 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _mailbox;
         set
         {
-            if (Set(ref _mailbox, value))
+            if (value == _mailbox || !ConfirmLeave(nameof(Mailbox)))
             {
-                View.Refresh();
-                UpdateFilterCounts();
-                OnPropertyChanged(nameof(ShowMailboxColumn));
+                return;
             }
+
+            _mailbox = value;
+            OnPropertyChanged();
+            View.Refresh();
+            UpdateFilterCounts();
+            OnPropertyChanged(nameof(ShowMailboxColumn));
         }
     }
 
+    /// <summary>
+    /// Blind labelling hides the AI's answer for unlabelled messages, which would empty the
+    /// attention view. Turning it on therefore switches to the unlabelled messages, and turning
+    /// it off returns to the earlier view; a banner says what is going on.
+    /// </summary>
     public bool BlindMode
     {
         get => _blindMode;
         set
         {
-            if (Set(ref _blindMode, value))
+            if (value == _blindMode || !ConfirmLeave(nameof(BlindMode)))
             {
-                Reload(Selected?.Id);
+                return;
             }
+
+            _blindMode = value;
+            OnPropertyChanged();
+            if (value)
+            {
+                _filterBeforeBlind = Filter;
+                _filter = Triage.Unlabeled;
+            }
+            else if (_filterBeforeBlind is not null && Filter == Triage.Unlabeled)
+            {
+                _filter = _filterBeforeBlind;
+                _filterBeforeBlind = null;
+            }
+
+            OnPropertyChanged(nameof(Filter));
+            Reload(Selected?.Id);
         }
     }
 
@@ -279,20 +331,61 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         get => _selected;
         set
         {
-            if (Set(ref _selected, value))
+            if (ReferenceEquals(value, _selected))
             {
-                OnPropertyChanged(nameof(HasSelection));
-                OnPropertyChanged(nameof(NoSelection));
-                OnPropertyChanged(nameof(DoneButtonText));
-                LoadEditor();
+                return;
+            }
+
+            if (_programmaticSelection == 0 && !ConfirmLeave(nameof(Selected)))
+            {
+                return;
+            }
+
+            // Saving reloads the list, which replaces the row objects.
+            if (value is not null && !Items.Contains(value))
+            {
+                value = Items.FirstOrDefault(i => i.Id == value.Id);
+            }
+
+            _selected = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasSelection));
+            OnPropertyChanged(nameof(NoSelection));
+            OnPropertyChanged(nameof(DoneButtonText));
+            Excerpt = null;
+            ExcerptInfo = "";
+            LoadEditor();
+        }
+    }
+
+    public string? EditAction { get => _draft.Action; set => SetDraft(() => _draft.Action = value); }
+    public string? EditUrgency { get => _draft.Urgency; set => SetDraft(() => _draft.Urgency = value); }
+    public string? EditTopic { get => _draft.Topic; set => SetDraft(() => _draft.Topic = value); }
+    /// <summary>The user's own words about a real message: masked like the summary in masked mode.</summary>
+    public string? EditNote
+    {
+        get => Masked && Selected is not null && _draft.Note is { Length: > 0 } note ? DisplayMask.Text(Selected.Id * 3 + 3, note.Length, 120) : _draft.Note;
+        set
+        {
+            if (!Masked)
+            {
+                SetDraft(() => _draft.Note = value);
             }
         }
     }
 
-    public string? EditAction { get => _editAction; set => Set(ref _editAction, value); }
-    public string? EditUrgency { get => _editUrgency; set => Set(ref _editUrgency, value); }
-    public string? EditTopic { get => _editTopic; set => Set(ref _editTopic, value); }
-    public DateTime? EditDeadline { get => _editDeadline; set => Set(ref _editDeadline, value); }
+    public int NoteMaxLength => UserLabel.MaxNoteChars;
+    public DateTime? EditDeadline
+    {
+        get => _draft.Deadline?.ToDateTime(TimeOnly.MinValue);
+        set => SetDraft(() => _draft.Deadline = value is { } d ? DateOnly.FromDateTime(d) : null);
+    }
+
+    /// <summary>The labelling form has a change that is not saved.</summary>
+    public bool IsDirty => Selected is not null && _draft.IsDirty;
+
+    /// <summary>Asks what to do with an unsaved label; set by the window. Without it changes are discarded.</summary>
+    public Func<bool, UnsavedChoice>? AskUnsaved { get; set; }
 
     public string StatusList { get => _statusList; private set => Set(ref _statusList, value); }
     public string StatusLabels { get => _statusLabels; private set => Set(ref _statusLabels, value); }
@@ -343,6 +436,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             ("otsikko", vm.Item.Subject), ("lähettäjän nimi", vm.Item.SenderName), ("lähettäjän osoite", vm.Item.SenderAddress),
             ("laatikko", vm.Item.Mailbox), ("yhteenveto", vm.Item.Assessment?.Summary), ("perustelu", vm.Item.Assessment?.Rationale),
+            ("merkinnän perustelu", vm.Item.Label?.Note),
         }));
 
     private void OnMonitorStatus(MonitorStatus status)
@@ -360,7 +454,59 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(NewResultsHint));
     }
 
-    private void Refresh() => Reload(Selected?.Id);
+    private void Refresh()
+    {
+        if (ConfirmLeave(nameof(RefreshCommand)))
+        {
+            Reload(Selected?.Id);
+        }
+    }
+
+    /// <summary>
+    /// Before anything that would replace the labelling form: true to go ahead. An unsaved
+    /// change is saved, discarded or kept (cancel) as the user chooses. On cancel the bound
+    /// property is announced again so that the control returns to its old value.
+    /// </summary>
+    public bool ConfirmLeave(string? revertProperty = null)
+    {
+        if (!IsDirty)
+        {
+            return true;
+        }
+
+        var choice = AskUnsaved?.Invoke(_draft.CanSave) ?? UnsavedChoice.Discard;
+        if (choice == UnsavedChoice.Save && _draft.CanSave)
+        {
+            SaveDraft();
+            Reload(Selected?.Id);
+            return true;
+        }
+
+        if (choice == UnsavedChoice.Discard)
+        {
+            _draft.MarkClean();
+            OnPropertyChanged(nameof(IsDirty));
+            return true;
+        }
+
+        if (revertProperty is not null)
+        {
+            Application.Current?.Dispatcher.BeginInvoke(() => OnPropertyChanged(revertProperty));
+        }
+
+        return false;
+    }
+
+    private void SetDraft(Action change)
+    {
+        change();
+        OnPropertyChanged(nameof(EditAction));
+        OnPropertyChanged(nameof(EditUrgency));
+        OnPropertyChanged(nameof(EditTopic));
+        OnPropertyChanged(nameof(EditDeadline));
+        OnPropertyChanged(nameof(EditNote));
+        OnPropertyChanged(nameof(IsDirty));
+    }
 
     private void Reload(long? selectId)
     {
@@ -368,19 +514,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _assessmentsAtReload = _assessmentsNow;
         OnPropertyChanged(nameof(NewResultsHint));
         var items = _store.GetReviewItems();
-        Items.Clear();
-        foreach (var item in items)
+        // Clearing the list deselects the row; that is not the user leaving an unsaved label.
+        _programmaticSelection++;
+        try
         {
-            Items.Add(new ItemViewModel(item, () => BlindMode, _mask));
+            Items.Clear();
+            foreach (var item in items)
+            {
+                Items.Add(new ItemViewModel(item, () => BlindMode, _mask));
+            }
+
+            // Display names, so that masked mode lists placeholders.
+            foreach (var mailbox in Items.Select(i => i.Mailbox).Distinct().Order().Where(m => !Mailboxes.Contains(m)))
+            {
+                Mailboxes.Add(mailbox);
+            }
+
+            Selected = selectId is null ? null : Items.FirstOrDefault(i => i.Id == selectId);
+        }
+        finally
+        {
+            _programmaticSelection--;
         }
 
-        // Display names, so that masked mode lists placeholders.
-        foreach (var mailbox in Items.Select(i => i.Mailbox).Distinct().Order().Where(m => !Mailboxes.Contains(m)))
-        {
-            Mailboxes.Add(mailbox);
-        }
-
-        Selected = selectId is null ? null : Items.FirstOrDefault(i => i.Id == selectId);
         UpdateFilterCounts();
         UpdateStatus(items);
     }
@@ -403,26 +559,28 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void LoadEditor()
     {
         var item = Selected?.Item;
-        var label = item?.Label;
-        var ai = Selected?.ShowAi == true ? item!.Assessment : null;
-        EditAction = label?.Action ?? ai?.Action;
-        EditUrgency = label?.Urgency ?? ai?.Urgency;
-        EditTopic = label?.Topic ?? ai?.Topic;
-        var deadline = label is not null ? label.Deadline : ai?.Deadline;
-        EditDeadline = deadline?.ToDateTime(TimeOnly.MinValue);
+        SetDraft(() => _draft.Load(item?.Label, Selected?.ShowAi == true ? item!.Assessment : null));
     }
 
     private void Save()
     {
-        if (Selected is null || EditAction is null || EditUrgency is null || EditTopic is null)
+        if (Selected is null || !_draft.CanSave)
         {
             return;
         }
 
-        var deadline = EditDeadline is { } d ? DateOnly.FromDateTime(d) : (DateOnly?)null;
-        var blind = BlindMode && Selected.Item.Label is null;
-        _store.SaveLabel(Selected.Item, new UserLabel(EditAction, EditUrgency, EditTopic, deadline), blind, DateTimeOffset.UtcNow);
-        AdvanceAfterLabel(Selected.Id);
+        var id = Selected.Id;
+        SaveDraft();
+        AdvanceAfterLabel(id);
+    }
+
+    /// <summary>Stores the form for the selected message without moving on.</summary>
+    private void SaveDraft()
+    {
+        var blind = BlindMode && Selected!.Item.Label is null;
+        _store.SaveLabel(Selected!.Item, _draft.ToLabel(), blind, DateTimeOffset.UtcNow);
+        _draft.MarkClean();
+        OnPropertyChanged(nameof(IsDirty));
     }
 
     private void AcceptAi()
@@ -432,7 +590,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _store.SaveLabel(Selected.Item, new UserLabel(ai.Action, ai.Urgency, ai.Topic, ai.Deadline), blind: false, DateTimeOffset.UtcNow);
+        // A note typed before accepting is kept.
+        _store.SaveLabel(Selected.Item, new UserLabel(ai.Action, ai.Urgency, ai.Topic, ai.Deadline, Note: UserLabel.CleanNote(_draft.Note)),
+            blind: false, DateTimeOffset.UtcNow);
         AdvanceAfterLabel(Selected.Id);
     }
 
@@ -453,7 +613,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private void ToggleDone()
     {
-        if (Selected is not { } vm)
+        if (Selected is not { } vm || !ConfirmLeave())
         {
             return;
         }
@@ -511,6 +671,47 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (OutlookUnavailableException ex)
         {
             MessageBox.Show(ex.Message, "Avaa Outlookissa");
+        }
+    }
+
+    /// <summary>
+    /// Reads the message from Outlook and shows where the program's injection check matches.
+    /// Not in masked mode: the excerpt is message text.
+    /// </summary>
+    private async Task ShowInjection()
+    {
+        if (Selected is not { } vm || Masked)
+        {
+            return;
+        }
+
+        ExcerptInfo = "Luetaan viestiä Outlookista…";
+        try
+        {
+            var read = await _outlook.ReadAsync(vm.Item.Reference, vm.Item.Mailbox, CancellationToken.None);
+            if (!ReferenceEquals(Selected, vm))
+            {
+                return;
+            }
+
+            if (read.Message is not { } message)
+            {
+                ExcerptInfo = "Viestiä ei voitu lukea Outlookista (se on ehkä siirretty tai poistettu).";
+                return;
+            }
+
+            Excerpt = InjectionExcerpt.Build(message.Subject, message.Body);
+            ExcerptInfo = Excerpt switch
+            {
+                null => "Ohjelman nykyinen tarkistus ei enää löydä viestistä ohjailua: sääntöä on tarkennettu arvion jälkeen. " +
+                        "Varoitus poistuu, kun viesti arvioidaan uudelleen.",
+                { Hit.Length: 0 } => $"Osuma: {Excerpt.RuleName}. Kohtaa ei voi näyttää.",
+                _ => $"Sääntö: {Excerpt.RuleName}. Kohta {Excerpt.Place}. Jos et näe tekstiä Outlookissa, se voi olla piilotettu (esim. valkoinen teksti).",
+            };
+        }
+        catch (OutlookUnavailableException ex)
+        {
+            ExcerptInfo = ex.Message;
         }
     }
 

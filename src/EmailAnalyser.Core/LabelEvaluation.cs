@@ -24,7 +24,9 @@ public sealed record LabelEvaluationResult(
     int LabeledBlind,
     int AgreeSeen,
     int LabeledSeen,
-    IReadOnlyDictionary<string, int> PromptVersions)
+    IReadOnlyDictionary<string, int> PromptVersions,
+    IReadOnlyDictionary<string, int> LabelTopics,
+    IReadOnlyDictionary<string, int> TopicMismatches)
 {
     public double Recall => AttentionExpected == 0 ? double.NaN : (double)AttentionFound / AttentionExpected;
 }
@@ -94,6 +96,10 @@ public static class LabelEvaluation
             assessed.Count(i => i.Label!.Blind),
             assessed.Count(i => !i.Label!.Blind && i.Label.AgreesWithAi),
             assessed.Count(i => !i.Label!.Blind),
-            assessed.GroupBy(i => i.PromptVersion ?? "?").ToDictionary(g => g.Key, g => g.Count()));
+            assessed.GroupBy(i => i.PromptVersion ?? "?").ToDictionary(g => g.Key, g => g.Count()),
+            labeled.GroupBy(i => i.Label!.Topic).ToDictionary(g => g.Key, g => g.Count()),
+            assessed.Where(i => i.Assessment!.Topic != i.Label!.Topic)
+                .GroupBy(i => $"{i.Label!.Topic} → {i.Assessment!.Topic}")
+                .ToDictionary(g => g.Key, g => g.Count()));
     }
 }

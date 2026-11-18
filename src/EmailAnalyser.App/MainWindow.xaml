@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:EmailAnalyser.App"
-        Title="{Binding WindowTitle}" Height="820" Width="1450" MinWidth="900" MinHeight="560"
+        Title="{Binding WindowTitle}" Icon="Assets/seula.ico" Height="820" Width="1450" MinWidth="900" MinHeight="560"
         Background="{StaticResource BarkWhite}" Foreground="{StaticResource Ink}" FontFamily="Segoe UI" FontSize="13">
     <Window.InputBindings>
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
@@ -20,11 +20,15 @@
                         Visibility="{Binding Masked, Converter={StaticResource BoolToVisibility}}">
                     <TextBlock Text="Peitetty näkymä: viestien tekstit on korvattu" Foreground="{StaticResource Ink}" FontSize="12" />
                 </Border>
-                <Grid Width="18" Height="18" Margin="0,0,10,0" VerticalAlignment="Center">
-                    <Path Fill="{StaticResource LeafBright}" Data="M9,1 C4,5 3.5,10 9,17 C14.5,10 14,5 9,1 Z" />
-                    <Path Stroke="{StaticResource BarkBlack}" StrokeThickness="1" Data="M9,4 L9,16" />
-                </Grid>
-                <TextBlock Text="Sähköpostiavustaja" Foreground="{StaticResource BarkWhite}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <!-- Logo A: a round sieve with one cloudberry caught on the mesh (small version without the holes). -->
+                <Viewbox Width="22" Height="22" Margin="0,0,10,0" VerticalAlignment="Center">
+                    <Canvas Width="64" Height="64">
+                        <Ellipse Canvas.Left="7" Canvas.Top="4" Width="50" Height="50" Stroke="{StaticResource BarkWhite}" StrokeThickness="6" />
+                        <Ellipse Canvas.Left="31" Canvas.Top="16" Width="14" Height="14" Fill="{StaticResource Cloudberry}" />
+                        <Ellipse Canvas.Left="27" Canvas.Top="56" Width="4" Height="4" Fill="{StaticResource LeafBright}" />
+                    </Canvas>
+                </Viewbox>
+                <TextBlock Text="Seula" Foreground="{StaticResource BarkWhite}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <TextBlock Text="paikallinen tekoäly: viestit eivät lähde koneelta" Foreground="{StaticResource OnDarkMuted}" FontSize="12"
                            Margin="14,1,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>
@@ -52,6 +56,18 @@
                     <TextBlock Text="{Binding NewResultsHint}" Foreground="{StaticResource Lake}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0,0,0" />
                 </StackPanel>
             </WrapPanel>
+        </Border>
+
+        <!-- Blind labelling hides the AI's answer, so the attention view would look empty without this. -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource CloudberryPale}" BorderBrush="{StaticResource Cloudberry}" BorderThickness="4,0,0,1"
+                Padding="12,6" Visibility="{Binding BlindMode, Converter={StaticResource BoolToVisibility}}">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Lopeta sokkomerkintä" Command="{Binding StopBlindCommand}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                <TextBlock TextWrapping="Wrap" VerticalAlignment="Center">
+                    <Run Text="Sokkomerkintä on päällä." FontWeight="SemiBold" />
+                    <Run Text="AI-arvio on piilotettu merkitsemättömistä viesteistä, joten toimenpiteet ja &quot;Vaatii huomiota&quot; perustuvat vain omiin merkintöihisi ja ohjelman varoituksiin. Näkymäksi vaihdettiin Merkitsemättömät; lopetus palauttaa edellisen näkymän." />
+                </TextBlock>
+            </DockPanel>
         </Border>
 
         <!-- Live monitoring state and its controls. -->
@@ -178,6 +194,7 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <TextBlock Grid.Row="0" Text="Toimenpide" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
                             <ComboBox Grid.Row="0" Grid.Column="1" Margin="0,2" ItemsSource="{Binding ActionOptions}"
@@ -194,15 +211,22 @@
                                         ToolTip="Poistaa määräajan" />
                                 <DatePicker SelectedDate="{Binding EditDeadline}" Loaded="DeadlinePicker_Loaded" />
                             </DockPanel>
-                            <WrapPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                            <TextBlock Grid.Row="4" Text="Perustelu" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="4" Grid.Column="1" Margin="0,2" Padding="4,3" MaxLength="{Binding NoteMaxLength, Mode=OneTime}"
+                                     Text="{Binding EditNote, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Valinnainen: muutama sana siitä, miksi merkitsit näin. Tallentuu salattuun tietokantaan ja vientitiedostoon." />
+                            <WrapPanel Grid.Row="5" Grid.ColumnSpan="2" Margin="0,8,0,0">
                                 <Button Content="Tallenna" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryButton}" Margin="0,0,6,6"
                                         ToolTip="Tallenna merkintä ja siirry seuraavaan (Ctrl+S)" />
                                 <Button Content="AI oli oikeassa" Command="{Binding AcceptAiCommand}" Margin="0,0,6,6"
                                         ToolTip="Tallenna AI-arvio merkinnäksi ja siirry seuraavaan (Ctrl+Enter)" />
                                 <Button Content="Poista" Command="{Binding DeleteLabelCommand}" Margin="0,0,6,6" ToolTip="Poista oma merkintä" />
                             </WrapPanel>
-                            <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Text="{Binding Selected.LabelInfo}" Foreground="{StaticResource Muted}"
-                                       FontSize="12" TextWrapping="Wrap" />
+                            <StackPanel Grid.Row="6" Grid.ColumnSpan="2">
+                                <TextBlock Text="Muutoksia ei ole tallennettu (Ctrl+S)" Foreground="#8A5300" FontWeight="SemiBold" FontSize="12"
+                                           Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="{Binding Selected.LabelInfo}" Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" />
+                            </StackPanel>
                         </Grid>
                     </GroupBox>
 
@@ -251,6 +275,19 @@
                                     <TextBlock Text="Viesti yrittää ohjailla tekoälyä" FontWeight="SemiBold" />
                                     <TextBlock TextWrapping="Wrap" Margin="0,2,0,0"
                                                Text="Viestissä on tekoälylle osoitettua tekstiä, joten AI-arvio voi olla viestin ohjailema. Tarkista viesti itse." />
+                                    <Button Content="Näytä ohjailukohta" HorizontalAlignment="Left" Margin="0,8,0,0"
+                                            Command="{Binding DataContext.ShowInjectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            ToolTip="Lukee viestin Outlookista ja näyttää kohdan, johon ohjelman tarkistus osui. Kohtaa ei tallenneta." />
+                                    <TextBlock Text="{Binding DataContext.ExcerptInfo, RelativeSource={RelativeSource AncestorType=Window}}"
+                                               TextWrapping="Wrap" Margin="0,6,0,0" FontSize="12" />
+                                    <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Cloudberry}" BorderThickness="1"
+                                            Padding="8,6" Margin="0,6,0,0"
+                                            Visibility="{Binding DataContext.HasExcerpt, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock TextWrapping="Wrap" FontFamily="Consolas" FontSize="12"
+                                                   DataContext="{Binding DataContext.Excerpt, RelativeSource={RelativeSource AncestorType=Window}}">
+                                            <Run Text="{Binding Before, Mode=OneWay}" Foreground="{StaticResource Muted}" /><Run Text="{Binding Hit, Mode=OneWay}" FontWeight="Bold" Background="{StaticResource Cloudberry}" /><Run Text="{Binding After, Mode=OneWay}" Foreground="{StaticResource Muted}" />
+                                        </TextBlock>
+                                    </Border>
                                 </StackPanel>
                             </Border>
 

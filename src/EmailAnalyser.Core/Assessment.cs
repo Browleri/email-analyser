@@ -6,7 +6,7 @@ namespace EmailAnalyser.Core;
 public static class Labels
 {
     public static readonly IReadOnlySet<string> Topics =
-        new HashSet<string> { "tyo", "sijoitukset", "hallinto", "henkilokohtainen", "uutiskirje", "muu" };
+        new HashSet<string> { "tyo", "sijoitukset", "perheyhtio", "kohdeyhtiot", "markkinat", "sijoitusmahdollisuudet", "tapahtumat", "hallinto", "ilmoitukset", "henkilokohtainen", "uutiskirje", "muu" };
 
     public static readonly IReadOnlySet<string> Actions =
         new HashSet<string> { "vastattava", "tehtava", "tiedoksi", "tarkista" };

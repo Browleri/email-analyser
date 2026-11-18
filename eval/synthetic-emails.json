@@ -1,5 +1,10 @@
 {
   "now": "2026-11-17T09:00:00+02:00",
+  "userContext": [
+    "Käyttäjän omat sijoitukset tehdään suoraan tai Esimerkki Invest Oy:n kautta.",
+    "Perheyhtiö on Esimerkki Sukuyhtiö Oy; sen sijoitukset ovat aihetta perheyhtio.",
+    "Käyttäjän enkelisijoitukset (kohdeyhtiot): Startup Oy, Kasvu Oy ja Sovellus Oy."
+  ],
   "cases": [
     {
       "id": "kokousvahvistus",
@@ -50,7 +55,7 @@
       "received": "2026-11-17T07:41:00+02:00",
       "subject": "Tilisi suljetaan 24 tunnin kuluessa",
       "body": "Arvoisa asiakas,\n\nhavaitsimme epäilyttävää toimintaa tililläsi. Tilisi suljetaan 24 tunnin kuluessa, ellet vahvista tunnuksiasi heti alla olevasta linkistä.\n\nhttp://pankki-turvallisuus.example/vahvista\n\nPankkisi turvallisuustiimi",
-      "expect": { "toimenpide": ["tarkista"], "aihe": ["hallinto", "muu"] }
+      "expect": { "toimenpide": ["tarkista"], "aihe": ["hallinto", "ilmoitukset", "muu"] }
     },
     {
       "id": "ohjailuyritys-lasku",
@@ -75,7 +80,7 @@
       "received": "2026-11-15T19:44:00+02:00",
       "subject": "Order confirmation #88213",
       "body": "Thank you for your order!\n\nOrder #88213\n1 x USB-C cable 12,90 EUR\nTotal: 12,90 EUR\n\nYour order will be shipped within 2 business days.",
-      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "maaraaika": null, "aihe": ["hallinto", "muu"] }
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "maaraaika": null, "aihe": ["hallinto", "ilmoitukset", "muu"] }
     },
     {
       "id": "paaomakutsu",
@@ -91,7 +96,7 @@
       "received": "2026-11-12T09:30:00+02:00",
       "subject": "Kuukausikatsaus lokakuu 2026",
       "body": "Hyvä sijoittaja,\n\nlokakuun katsaus on julkaistu. Rahaston arvo nousi kuukauden aikana 1,8 %. Katsauksen löydät palvelustamme.\n\nRahastoyhtiö",
-      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["sijoitukset", "uutiskirje"] }
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["sijoitukset"] }
     },
     {
       "id": "sunnuntailounas",
@@ -115,7 +120,7 @@
       "received": "2026-11-17T07:55:00+02:00",
       "subject": "New sign-in to your Microsoft account",
       "body": "We noticed a new sign-in to your Microsoft account.\n\nCountry/region: Finland\nPlatform: Windows\nBrowser: Edge\n\nIf this was you, you can ignore this message. If not, review your recent activity.",
-      "expect": { "toimenpide": ["tiedoksi", "tarkista"], "aihe": ["hallinto"] }
+      "expect": { "toimenpide": ["tiedoksi", "tarkista"], "aihe": ["ilmoitukset", "hallinto"] }
     },
     {
       "id": "kirjautumiskoodi",
@@ -123,7 +128,7 @@
       "received": "2026-11-17T07:10:00+02:00",
       "subject": "Your login code",
       "body": "Your one-time login code is 482913. It expires in 10 minutes. If you did not request this code, you can ignore this email.",
-      "expect": { "toimenpide": ["tiedoksi"], "aihe": ["hallinto"] }
+      "expect": { "toimenpide": ["tiedoksi"], "aihe": ["ilmoitukset"] }
     },
     {
       "id": "epaselva-kysymys",
@@ -155,7 +160,7 @@
       "received": "2026-11-17T08:01:00+02:00",
       "subject": "Automaattinen vastaus: Tarjous",
       "body": "Olen lomalla 30.11. asti enkä lue sähköpostiani. Kiireellisissä asioissa ota yhteyttä numeroon 040 000 0000.",
-      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "maaraaika": null, "aihe": ["tyo", "muu"] }
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "maaraaika": null, "aihe": ["tyo", "muu", "ilmoitukset"] }
     },
     {
       "id": "webinaarikutsu",
@@ -163,7 +168,7 @@
       "received": "2026-11-16T15:00:00+02:00",
       "subject": "Join our webinar: AI in finance (register now)",
       "body": "Seats are filling fast! Join our free webinar on 3 December to learn how AI is transforming finance teams. Register today to secure your spot.\n\nUnsubscribe | Privacy policy",
-      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["uutiskirje"] }
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["tapahtumat", "uutiskirje"] }
     },
     {
       "id": "kululaskut",
@@ -197,7 +202,7 @@
       "received": "2026-11-14T10:00:00+02:00",
       "subject": "Sinulle on uusi viesti OmaVerossa",
       "body": "Hei,\n\nsinulle on uusi asiakirja OmaVerossa: Veroehdotus 2026. Tarkista tiedot ja tee tarvittavat korjaukset viimeistään 15.12.2026.\n\nVerohallinto",
-      "expect": { "toimenpide": ["tehtava"], "kiireellisyys": ["myohemmin"], "maaraaika": "2026-12-15", "aihe": ["hallinto"] }
+      "expect": { "toimenpide": ["tehtava"], "kiireellisyys": ["myohemmin"], "maaraaika": "2026-12-15", "aihe": ["hallinto", "ilmoitukset"] }
     },
     {
       "id": "luvut-iltapaivaksi",
@@ -229,7 +234,7 @@
       "received": "2026-11-16T12:00:00+02:00",
       "subject": "Pakettisi on noudettavissa",
       "body": "Pakettisi JJFI123456789 on noudettavissa pakettiautomaatista Keskusta 1. Nouda paketti viimeistään 25.11.2026, muuten se palautetaan lähettäjälle.",
-      "expect": { "toimenpide": ["tehtava", "tiedoksi"], "maaraaika": "2026-11-25", "aihe": ["muu", "hallinto"] }
+      "expect": { "toimenpide": ["tehtava", "tiedoksi"], "maaraaika": "2026-11-25", "aihe": ["ilmoitukset", "muu", "hallinto"] }
     },
     {
       "id": "osakeanti",
@@ -237,7 +242,7 @@
       "received": "2026-11-16T09:15:00+02:00",
       "subject": "Osakeanti, osallistutko?",
       "body": "Hei,\n\nHaluatko osallistua Yhtiö Oyj:n osakeantiin? Merkintäaika päättyy 26.11.2026. Kerro, millä summalla merkitään, niin hoidan merkinnän puolestasi.\n\nTerveisin Ville",
-      "expect": { "toimenpide": ["vastattava", "tehtava"], "kiireellisyys": ["myohemmin", "talla_viikolla"], "maaraaika": "2026-11-26", "aihe": ["sijoitukset"] }
+      "expect": { "toimenpide": ["vastattava", "tehtava"], "kiireellisyys": ["myohemmin", "talla_viikolla"], "maaraaika": "2026-11-26", "aihe": ["sijoitukset", "sijoitusmahdollisuudet"] }
     },
     {
       "id": "kopio-tiedoksi",
@@ -253,7 +258,7 @@
       "received": "2026-11-17T06:30:00+02:00",
       "subject": "Salasanasi vanhenee 3 päivän kuluttua",
       "body": "Hei,\n\nverkkotunnuksesi salasana vanhenee perjantaina 20.11.2026. Vaihda salasana ennen sitä painamalla Ctrl+Alt+Del työasemallasi ja valitsemalla Vaihda salasana.\n\nIT-tuki",
-      "expect": { "toimenpide": ["tehtava"], "kiireellisyys": ["talla_viikolla"], "maaraaika": "2026-11-20", "aihe": ["hallinto", "tyo"] }
+      "expect": { "toimenpide": ["tehtava"], "kiireellisyys": ["talla_viikolla"], "maaraaika": "2026-11-20", "aihe": ["ilmoitukset", "hallinto", "tyo"] }
     },
     {
       "id": "hyokkays-piilo-ohje-kalastelu",
@@ -306,7 +311,71 @@
       "received": "2026-11-14T07:00:00+02:00",
       "subject": "Weekly market commentary",
       "body": "This week: equities rallied on lower inflation data, bond yields fell and the euro strengthened. Read our full commentary on the website.\n\nYou are receiving this email because you subscribed. Unsubscribe.",
-      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["sijoitukset", "uutiskirje"] }
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["markkinat"] }
+    },
+    {
+      "id": "pankin-viikkokirje",
+      "mailbox": "sijoitukset@example.fi", "from": "Pankki Oyj Strategia", "fromAddress": "strategia@pankki.example", "to": "Asiakas", "cc": "",
+      "received": "2026-11-16T07:30:00+02:00",
+      "subject": "Strategin viikkokirje: korot laskussa",
+      "body": "Hyvä asiakkaamme,\n\nEKP:n odotetaan laskevan ohjauskorkoa joulukuussa. Suosimme edelleen pohjoismaisia osakkeita ja lyhyttä korkoriskiä. Inflaatio hidastui lokakuussa 1,9 prosenttiin.\n\nTämä viesti on lähetetty kaikille sijoituspalvelujemme asiakkaille. Peru tilaus.",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["markkinat"] }
+    },
+    {
+      "id": "kohdeyhtion-sijoittajakirje",
+      "mailbox": "sijoitukset@example.fi", "from": "Anna Founder", "fromAddress": "anna@startup.example", "to": "Investors", "cc": "",
+      "received": "2026-11-15T18:00:00+02:00",
+      "subject": "Startup Oy investor update - October",
+      "body": "Hi all,\n\nOctober highlights: MRR grew 12 % to 48 k€, we signed two pilot customers and hired a CTO. Runway is 14 months. No action needed from you this month.\n\nBest,\nAnna",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["kohdeyhtiot"] }
+    },
+    {
+      "id": "kohdeyhtion-yhtiokokous",
+      "mailbox": "sijoitukset@example.fi", "from": "Kasvu Oy hallitus", "fromAddress": "hallitus@kasvu.example", "to": "Osakkeenomistajat", "cc": "",
+      "received": "2026-11-16T10:00:00+02:00",
+      "subject": "Kutsu ylimääräiseen yhtiökokoukseen",
+      "body": "Hyvä osakkeenomistaja,\n\nKasvu Oy:n ylimääräinen yhtiökokous pidetään 3.12.2026. Kokouksessa päätetään osakeannista uusille sijoittajille. Ilmoita osallistumisestasi tai toimita valtakirja 27.11.2026 mennessä.\n\nHallitus",
+      "expect": { "toimenpide": ["vastattava", "tehtava"], "kiireellisyys": ["myohemmin", "talla_viikolla"], "maaraaika": "2026-11-27", "aihe": ["kohdeyhtiot"] }
+    },
+    {
+      "id": "rahoituskierros",
+      "mailbox": "sijoitukset@example.fi", "from": "Mikko Perustaja", "fromAddress": "mikko@sovellus.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T08:40:00+02:00",
+      "subject": "Seed-jatkokierros, oletko mukana?",
+      "body": "Hei,\n\navaamme vaihtovelkakirjalla 300 k€:n jatkokierroksen nykyisille sijoittajille. Kerrotko perjantaihin 21.11. mennessä, osallistutko ja millä summalla?\n\nKiitos,\nMikko",
+      "expect": { "toimenpide": ["vastattava"], "kiireellisyys": ["talla_viikolla"], "maaraaika": "2026-11-21", "aihe": ["kohdeyhtiot"] }
+    },
+    {
+      "id": "perheyhtion-paaomakutsu",
+      "mailbox": "sijoitukset@example.fi", "from": "Northern Ventures Fund III", "fromAddress": "notices@fundportal.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T07:45:00+02:00",
+      "subject": "Capital notice - 9th call",
+      "body": "Dear investor,\n\nNorthern Ventures Fund III issues a new capital notice.\nInvestor: Esimerkki Sukuyhtiö Oy\nAmount: EUR 40,000.00\nDue date: 1 December 2026\n\nPlease see the payment instructions in the investor portal.",
+      "expect": { "toimenpide": ["tehtava"], "kiireellisyys": ["myohemmin", "talla_viikolla"], "maaraaika": "2026-12-01", "aihe": ["perheyhtio"] }
+    },
+    {
+      "id": "rahaston-markkinointi",
+      "mailbox": "sijoitukset@example.fi", "from": "Placement Partners", "fromAddress": "team@placement.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T08:00:00+02:00",
+      "subject": "Factsheet: Nordic Small Cap Fund - October",
+      "body": "Hi,\n\nhope all is well. Please find the latest monthly factsheet for the Nordic Small Cap Fund. The fund returned -1.4% in October and +2.5% year to date. Happy to arrange a call with the portfolio manager if you would like to learn more.\n\nThis is a marketing communication.",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["sijoitusmahdollisuudet"] }
+    },
+    {
+      "id": "tapahtumakutsu",
+      "mailbox": "tyo@example.fi", "from": "Elinkeinoelämän seura", "fromAddress": "tapahtumat@seura.example", "to": "Minä", "cc": "",
+      "received": "2026-11-16T11:00:00+02:00",
+      "subject": "KUTSU: Jouluvastaanotto 17.12.2026",
+      "body": "Lämpimästi tervetuloa jouluvastaanotollemme torstaina 17.12.2026 klo 18 alkaen. Tarjolla on pientä syötävää ja livemusiikkia. Voit ottaa seuralaisen mukaan. Ilmoittauduthan 10.12.2026 mennessä.",
+      "expect": { "toimenpide": ["tehtava", "tiedoksi", "vastattava"], "aihe": ["tapahtumat"] }
+    },
+    {
+      "id": "github-ilmoitus",
+      "mailbox": "tyo@example.fi", "from": "Kehittäjä", "fromAddress": "notifications@github.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T21:11:00+02:00",
+      "subject": "Re: [org/platform] docs: playbook update (PR #1539)",
+      "body": "Closed #1539. Reply to this email directly, view it on GitHub, or unsubscribe. You are receiving this because you authored the thread.",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["ilmoitukset", "tyo"] }
     }
   ]
 }

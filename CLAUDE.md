@@ -1,6 +1,6 @@
 # Claude Coden ohje tälle repolle
 
-Paikallinen AI-avustaja Classic Outlookiin. Ohjelma lukee käyttäjän Outlook-laatikot COM-objektimallilla, arvioi viestit paikallisella kielimallilla (LM Studio) ja kokoaa huomiota vaativat viestit WPF-näkymään. Suunnitelma, arkkitehtuuri ja vaiheiden hyväksymisehdot ovat tiedostossa [Outlook_paikallinen_AI_suunnitelma.md](Outlook_paikallinen_AI_suunnitelma.md). Se on suunnittelun ainoa lähde: päivitä sitä, kun ratkaisu muuttuu, äläkä kopioi sen sisältöä tänne.
+Seula on paikallinen AI-avustaja Classic Outlookiin. Ohjelma lukee käyttäjän Outlook-laatikot COM-objektimallilla, arvioi viestit paikallisella kielimallilla (LM Studio) ja kokoaa huomiota vaativat viestit WPF-näkymään. Suunnitelma, arkkitehtuuri ja vaiheiden hyväksymisehdot ovat tiedostossa [Outlook_paikallinen_AI_suunnitelma.md](Outlook_paikallinen_AI_suunnitelma.md). Se on suunnittelun ainoa lähde: päivitä sitä, kun ratkaisu muuttuu, äläkä kopioi sen sisältöä tänne.
 
 ## Ympäristö
 

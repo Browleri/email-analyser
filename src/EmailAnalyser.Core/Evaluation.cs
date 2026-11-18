@@ -10,6 +10,9 @@ public sealed class EvalSet
     [JsonPropertyName("now")] public DateTimeOffset Now { get; init; }
     [JsonPropertyName("cases")] public List<EvalCase> Cases { get; init; } = [];
 
+    /// <summary>Synthetic user background, used instead of the real one in settings.</summary>
+    [JsonPropertyName("userContext")] public List<string> UserContext { get; init; } = [];
+
     public static EvalSet Load(string path) =>
         JsonSerializer.Deserialize<EvalSet>(File.ReadAllText(path, Encoding.UTF8))
         ?? throw new InvalidDataException($"Testiaineistoa ei voitu lukea: {path}");

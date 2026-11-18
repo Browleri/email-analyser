@@ -4,7 +4,13 @@
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <AssemblyName>EmailAnalyser</AssemblyName>
+    <ApplicationIcon>Assets\seula.ico</ApplicationIcon>
+    <Product>Seula</Product>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\seula.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\EmailAnalyser.Core\EmailAnalyser.Core.csproj" />

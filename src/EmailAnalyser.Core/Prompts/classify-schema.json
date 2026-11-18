@@ -4,7 +4,7 @@
   "properties": {
     "yhteenveto": { "type": "string" },
     "perustelu": { "type": "string" },
-    "aihe": { "type": "string", "enum": ["tyo", "sijoitukset", "hallinto", "henkilokohtainen", "uutiskirje", "muu"] },
+    "aihe": { "type": "string", "enum": ["tyo", "sijoitukset", "perheyhtio", "kohdeyhtiot", "markkinat", "sijoitusmahdollisuudet", "tapahtumat", "hallinto", "ilmoitukset", "henkilokohtainen", "uutiskirje", "muu"] },
     "toimenpide": { "type": "string", "enum": ["vastattava", "tehtava", "tiedoksi", "tarkista"] },
     "kiireellisyys": { "type": "string", "enum": ["tanaan", "talla_viikolla", "myohemmin", "ei_maaraaikaa"] },
     "maaraaika": { "type": ["string", "null"] },

@@ -73,6 +73,12 @@ public sealed record AppSettings
     public CategoryMode CategoryMode { get; init; } = CategoryMode.Off;
     public string CategoryTestSubject { get; init; } = "AI: testiviesti";
 
+    /// <summary>
+    /// The user's background for the classifier (investment companies, portfolio companies, mailboxes).
+    /// Local only: it is appended to the prompt and is never committed or printed.
+    /// </summary>
+    public List<string> UserContext { get; init; } = [];
+
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,

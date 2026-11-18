@@ -1,4 +1,4 @@
-# Paikallinen AI-avustaja Classic Outlookiin
+# Seula: paikallinen AI-avustaja Classic Outlookiin
 
 Toteutussuunnitelma, 17.11.2026 (päivitetty samana päivänä infrastruktuurikatselmoinnin jälkeen)
 
@@ -122,7 +122,7 @@ Jos jompikumpi ehto ei täyty, erää lykätään ja yritetään uudelleen muuta
 
 | Kenttä | Esimerkkejä / käytäntö |
 | --- | --- |
-| Aihe | Työ, sijoitukset, hallinto, henkilökohtainen, uutiskirje, muu; käyttäjän muokattavissa |
+| Aihe | Työ, omat sijoitukset, perheyhtiö, kohdeyhtiöt, markkinat, sijoitusmahdollisuudet, tapahtumat, hallinto, ilmoitukset, henkilökohtainen, uutiskirje, muu. Aihe kuvaa asiaa, ei muotoa. Sijoitusaiheet lisättiin 18.11.2026 käyttäjän pyynnöstä, jotta sijoitusviestejä voi myöhemmin käyttää lähdeaineistona (markkinanäkymä, enkelisijoitusten seuranta). Sijoitustahot ja kohteet ovat paikallisessa asetuksessa `userContext`, ei kehotteessa |
 | Toimenpide | Vastattava, tehtävä, tiedoksi, tarkista; myöhemmin odottaa muita |
 | Kiireellisyys | Tänään, tällä viikolla, myöhemmin, ei määräaikaa |
 | Määräaika | Vain viestistä perusteltava päivämäärä; muuten null |
@@ -353,13 +353,29 @@ Kohdat 1–2 toteutettiin 18.11.2026:
 - **Hoidettu:** tietokannan versio 4 lisää taulun `done`. Ctrl+E tai paneelin painike kuittaa viestin tai peruu kuittauksen. Hoidettu viesti poistuu huomio- ja toimenpidesuodattimista ja himmenee Kaikki-näkymässä, mutta se jää suodattimiin Merkitsemättömät, Huomiotta jääneet, Ongelmat ja Hoidetut. Outlookiin ei kirjoiteta mitään, ja merkintä ja arviot säilyvät. Säilytysaika poistaa kuittauksen myös viesteistä, joiden tunnisteet säilytetään.
 - **Testit:** `TriageTests` ja `DoneStateTests` (8). Peitetyt kuvakaappaukset läpäisivät vuototarkistuksen.
 
+Kohta 3 toteutettiin 18.11.2026:
+- **Sokkotila:** kun sokkomerkintä kytketään päälle, näkymäksi vaihtuu Merkitsemättömät, ja lakankeltainen banneri selittää, miksi toimenpiteet ja huomionäkymä perustuvat vain omiin merkintöihin ja varoituksiin. Bannerissa on painike "Lopeta sokkomerkintä", ja lopetus palauttaa edellisen näkymän.
+- **Tallentamaton merkintä (`LabelDraft` Coressa):** lomake muistaa arvot, joilla se avattiin; esitäytetty AI-arvio ei ole muutos. Ennen rivin, suodattimen, laatikon tai sokkotilan vaihtoa, päivitystä (F5), kuittausta ja ikkunan sulkemista ohjelma kysyy: tallenna, hylkää tai jatka. Keskeneräisen merkinnän voi vain hylätä tai jatkaa. Peruttaessa valinta palaa ennalleen. Lomakkeessa näkyy "Muutoksia ei ole tallennettu". Kuvakaappausajo ei kysy mitään.
+- **Testit:** `LabelDraftTests` (4). Kysymysikkunan kulku on näkymäkoodissa, joten se tarkistetaan käsin.
+
 Merkintöjen vienti ja tuonti toteutettiin 18.11.2026 ennen otoksen merkintää (ks. Säilytys ja varmuuskopiointi, tietoturva-arvion R34–R35).
 
-Jäljellä vaiheessa 3: käyttäjä merkitsee otoksen näkymässä ja vie merkinnät jokaisen kierroksen jälkeen. Toteutusjärjestyksen kohdat 3–4 (sokkotilan selitys, tallentamattoman merkinnän varoitus, seurannan tilan jäsentely ja automaattinen päivitys) voi tehdä merkinnän rinnalla; kohta 3 on hyödyllinen ennen sokkomerkintää. Sitten löytymisosuus ja turhat hälytykset mitataan arviointiosasta, ja jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
+Lisäykset 18.11.2026 merkinnän alettua (20 merkintää):
+
+- Aiheet `kohdeyhtiot` ja `markkinat` lisättiin, ja `sijoitukset` rajattiin omiin sijoituksiin. Sen jälkeen agentti kävi käyttäjän pyynnöstä läpi 50 uusinta viestiä rungot mukaan lukien. Löydösten perusteella lisättiin `perheyhtio` (perheyhtiön sijoitukset), `sijoitusmahdollisuudet` (rahastojen markkinointi ja annit), `tapahtumat` ja `ilmoitukset` (automaattiset ilmoitukset erotettiin hallinnosta). 50 viestistä noin 15 oli ilmoituksia, 10 markkinatietoa, 4–5 sijoitustarjouksia ja 4 tapahtumakutsuja.
+- Käyttäjän sijoitustahot ja kohteet ovat paikallisessa asetuksessa `userContext`, joka lisätään kehotteeseen ja kehoteversioon. Testiaineistolla on oma keinotekoinen taustansa (45 tapausta).
+- Uutiskirjeiden piilotettu esikatselutäyte (U+034F ja vastaavat) poistetaan ennen mallia, koska se vei syötteen tilaa ja aiheutti katkaisuja.
+- Kehoteversio vaihtui, joten kaikki viestit arvioidaan uudelleen (`requeue --all`), ja käyttäjä tarkistaa aiemmat sijoitus-, uutiskirje- ja hallintomerkintänsä.
+- Merkintään voi kirjoittaa valinnaisen lyhyen perustelun (tietokannan versio 5).
+- Ohjailuvaroituksen kohdan voi näyttää näkymässä. Ainoa oikea osuma oli väärä hälytys (lainausmerkit `>>>`), ja sääntöä tiukennettiin.
+- `labels` näyttää merkintöjen aiheet ja aihe-erot, ja `report` aiheet laatikoittain.
+- Sovelluksen nimi on Seula, ja logo on pyöreä seula, jonka verkolle jää yksi hilla (otsikkopalkki ja ikkunan kuvake `Assets/seula.ico`). Tekniset nimet pysyvät ennallaan.
+
+Jäljellä vaiheessa 3: käyttäjä merkitsee otoksen näkymässä ja vie merkinnät jokaisen kierroksen jälkeen. Toteutusjärjestyksen kohdan 4 (seurannan tilan jäsentely ja automaattinen päivitys) voi tehdä merkinnän rinnalla. Sitten löytymisosuus ja turhat hälytykset mitataan arviointiosasta, ja jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
 
 ### 4. Tietoturvan arviointi
 
-Sähköpostin sisältö on hyökkääjän hallitsemaa syötettä, ja se kulkee kielimallin kautta käyttäjän näkymään ja myöhemmin Outlook-luokkiin. Ennen kuin sovellus kirjoittaa Outlookiin tai otetaan jatkuvaan käyttöön, riskit arvioidaan järjestelmällisesti ja toteutus käydään läpi niiden kannalta. Arvio on tiedostossa [docs/tietoturva-arvio.md](docs/tietoturva-arvio.md). Siinä ovat suojattavat kohteet, tietovirrat ja luottamusrajat, hyökkääjät, riskirekisteri (nyt R1–R35) todennäköisyyksineen ja vaikutuksineen, toteutuksesta löydetyt puutteet (nyt F1–F19) sekä avoimet toimenpiteet.
+Sähköpostin sisältö on hyökkääjän hallitsemaa syötettä, ja se kulkee kielimallin kautta käyttäjän näkymään ja myöhemmin Outlook-luokkiin. Ennen kuin sovellus kirjoittaa Outlookiin tai otetaan jatkuvaan käyttöön, riskit arvioidaan järjestelmällisesti ja toteutus käydään läpi niiden kannalta. Arvio on tiedostossa [docs/tietoturva-arvio.md](docs/tietoturva-arvio.md). Siinä ovat suojattavat kohteet, tietovirrat ja luottamusrajat, hyökkääjät, riskirekisteri (nyt R1–R37) todennäköisyyksineen ja vaikutuksineen, toteutuksesta löydetyt puutteet (nyt F1–F19) sekä avoimet toimenpiteet.
 
 Tila 17.11.2026: arvio on tehty, ja puutteet F1–F10 on korjattu ja testattu. Hyökkäystesti paljasti, että malli totteli väärennettyä erotinta ja roolileikkiä. Siksi ohjelma pakottaa nyt toimenpiteeksi "tarkista" aina, kun viestissä havaitaan ohjailuyritys (F10). Korjauksen jälkeen kaikki kuusi hyökkäystapausta päätyivät tarkistettaviksi, eikä 192 oikeasta viestistä yksikään osunut heuristiikkaan. Sovelluksen ulkopuoliset riskit R13–R16 odottavat käyttäjän päätöstä, ja vaiheen 5 kirjoitusvaatimukset ovat arvion kohdassa "Avoimet toimenpiteet".
 
@@ -413,7 +429,7 @@ Tulokset 17.11.2026:
 - Palvelimen tunnistus oikealla koneella: portin 1234 omistaa `%LOCALAPPDATA%\Programs\LM Studio\LM Studio.exe`.
 - Seuranta oikeasti 18 minuuttia (`watch --minutes 18 --now`): ensimmäinen haku lisäsi jonoon 105 viestiä kolmen päivän ajalta. Kaksi erää arvioi 48 viestiä ilman virheitä, ja jokainen vastaus läpäisi `model`-kentän tarkistuksen. Aikarajan keskeyttämä erä purki mallin, ja LM Studion lokit olivat puhtaat. 57 viestiä jäi jonoon seuraavaa ajoa varten. Erän nopeus oli noin 22 s viestiä kohden, eli hitaampi kuin vaiheessa 2: näytönohjaimella oli ennen latausta muuta kuormaa (2,2 Gt).
 - Koeajo paljasti virheen: "Käsittele nyt" jätti herätteen odottamaan, joten toinen erä alkoi heti ensimmäisen jälkeen ilman kahden minuutin taukoa. Korjattu ja testattu (F16).
-- Huijausmerkki 192 oikeassa viestissä: tunnistusotsake löytyi 191 viestistä, ja signaali osui 2 viestiin (`dmarc_fail`, sama laatikko). Ohjailuheuristiikka ei osunut yhteenkään.
+- Huijausmerkki 192 oikeassa viestissä: tunnistusotsake löytyi 191 viestistä, ja signaali osui 2 viestiin (`dmarc_fail`, sama laatikko). Ohjailuheuristiikka ei osunut yhteenkään. 18.11.2026 ajossa 329 viestiin heuristiikka osui yhteen: rivin alun `>>>` oli lainattu vastaus. Sääntöä tiukennettiin, ja nyt osumia on 0.
 - Testiaineistoon lisättiin kaksi väärennetyn lähettäjän tapausta (`huijaus-dmarc-lasku`, `huijaus-nimi-ristiriita`). Yksikkötesti varmistaa, että huijausmerkki osuu niihin eikä mihinkään muuhun aineiston tapaukseen.
 - Yksikkötestit kattavat eräehdot, lykkäyksen, varoituksen, keskeytyksen, Outlookin katkon, haun limityksen, luokkien toistamattomuuden, käyttäjän poistaman luokan, palautuksen, ristiriitaisen kohteen, rajatut uudelleenyritykset ja säilytysajan.
 

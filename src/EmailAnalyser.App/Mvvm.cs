@@ -111,7 +111,9 @@ public static class Display
 
     public static readonly IReadOnlyList<Option> Topics =
     [
-        new("tyo", "Työ"), new("sijoitukset", "Sijoitukset"), new("hallinto", "Hallinto"),
+        new("tyo", "Työ"), new("sijoitukset", "Omat sijoitukset"), new("perheyhtio", "Perheyhtiö"), new("kohdeyhtiot", "Kohdeyhtiöt"),
+        new("markkinat", "Markkinat"), new("sijoitusmahdollisuudet", "Sijoitusmahdollisuudet"), new("tapahtumat", "Tapahtumat"),
+        new("hallinto", "Hallinto"), new("ilmoitukset", "Ilmoitukset"),
         new("henkilokohtainen", "Henkilökohtainen"), new("uutiskirje", "Uutiskirje"), new("muu", "Muu"),
     ];
 
