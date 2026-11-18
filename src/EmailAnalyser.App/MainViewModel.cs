@@ -30,8 +30,14 @@ public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode, Display
     public string LabeledMark => IsLabeled ? "✓" : "";
 
     /// <summary>In blind mode the AI's answer is hidden until the user has labelled the message.</summary>
-    public bool ShowAi => Item.Assessment is not null && (!blindMode() || IsLabeled);
+    public bool ShowAi => Triage.AiVisible(Item, blindMode());
     public bool AiHidden => Item.Assessment is not null && !ShowAi;
+
+    /// <summary>The list follows the user's label first, then the AI (as Outlook categories do).</summary>
+    private EffectiveClassification Effective => Triage.Effective(Item, blindMode());
+
+    public bool IsDone => Triage.IsDone(Item);
+    public string DoneInfo => Item.DoneAt is { } at ? $"Hoidettu {at.ToLocalTime():d.M.yyyy 'klo' HH.mm}. Merkintä ja arvio säilyvät." : "";
 
     public string AiAction => ShowAi ? Display.Text(Item.Assessment!.Action) : Hidden;
     public string AiUrgency => ShowAi ? Display.Text(Item.Assessment!.Urgency) : Hidden;
@@ -45,51 +51,55 @@ public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode, Display
     public string Review => !ShowAi || !Item.Assessment!.NeedsReview
         ? ""
         : "Tarkistettava: " + string.Join(", ", Item.Assessment.ReviewReasons.Select(Display.Text));
-    public bool InjectionSuspected => Item.Assessment?.ReviewReasons.Contains(InjectionHeuristics.ReviewReason) == true;
-    public bool SenderSuspected => Item.Assessment?.ReviewReasons.Contains(SenderAuthentication.ReviewReason) == true;
+    public bool InjectionSuspected => Triage.InjectionSuspected(Item);
+    public bool SenderSuspected => Triage.SenderSuspected(Item);
 
     /// <summary>
     /// The program's own checks, not the model's opinion: shown even in blind mode, because
     /// a phishing warning matters more than an unbiased label.
     /// </summary>
-    public bool HasWarning => SenderSuspected || InjectionSuspected;
+    public bool HasWarning => Triage.HasWarning(Item);
     public string WarningMark => HasWarning ? "⚠" : "";
     public string? WarningTip =>
         SenderSuspected ? "Lähettäjän tunnistus ei täsmää: viesti voi olla huijaus" :
         InjectionSuspected ? "Viestissä on tekoälylle osoitettua tekstiä" : null;
 
-    /// <summary>Row highlight: only a failed sender check colours the whole row.</summary>
-    public string Emphasis => SenderSuspected ? "danger" : "";
+    /// <summary>Row highlight: a failed sender check colours the row; a done message is dimmed.</summary>
+    public string Emphasis => SenderSuspected ? "danger" : IsDone ? "done" : "";
 
-    private bool HasCurrentAssessment => Item.Status == "assessed" && Item.Assessment is not null;
-
-    /// <summary>The action for the coloured tag in the list; empty when hidden or not assessed.</summary>
-    public string ActionKey => HasCurrentAssessment && ShowAi ? Item.Assessment!.Action : "";
+    /// <summary>The action for the coloured tag in the list: the user's label, otherwise the AI's.</summary>
+    public string ActionKey => Effective.Action ?? "";
     public string ActionText => Display.Text(ActionKey);
-    public string UrgencyKey => ActionKey.Length > 0 ? Item.Assessment!.Urgency : "";
+    public string ActionSource => Effective.Source switch
+    {
+        ClassificationSource.Label => "Oma merkintä",
+        ClassificationSource.Ai => "AI-arvio",
+        _ => "",
+    };
+
+    /// <summary>The urgency next to the tag; a stale AI answer (message queued again) shows the state instead.</summary>
+    public string UrgencyKey => Effective.Source == ClassificationSource.Label || Item.Status == "assessed" ? Effective.Urgency ?? "" : "";
     public string UrgencyText => Display.Text(UrgencyKey).ToLowerInvariant();
 
-    /// <summary>Shown instead of the tag: the processing state, or the blind-mode mask.</summary>
-    public string StateText => !HasCurrentAssessment ? Status : ShowAi ? "" : Hidden;
+    /// <summary>Next to or instead of the tag: the processing state, the blind-mode mask or "hoidettu".</summary>
+    public string StateText =>
+        Effective.Source == ClassificationSource.None ? (AiHidden ? Hidden : Status) :
+        UrgencyKey.Length == 0 ? Status :
+        IsDone ? "· hoidettu" : "";
 
-    /// <summary>Most important first when sorted ascending: action, then urgency.</summary>
-    public int PrioritySort =>
-        Item.Status != "assessed" || Item.Assessment is null || !ShowAi
-            ? 99
-            : Rank(ActionPriority, Item.Assessment.Action) * 10 + Rank(UrgencyPriority, Item.Assessment.Urgency);
+    /// <summary>The AI's own answer, for the AI card: compared with the label, never replaced by it.</summary>
+    public string AiActionKey => ShowAi ? Item.Assessment!.Action : "";
+    public string AiActionText => Display.Text(AiActionKey);
 
-    /// <summary>Nearest deadline first when sorted ascending; no deadline last.</summary>
-    public DateOnly DeadlineSort => ShowAi && Item.Assessment!.Deadline is { } deadline ? deadline : DateOnly.MaxValue;
+    /// <summary>The deadline shown in the list: the label's, otherwise the AI's.</summary>
+    public string EffectiveDeadline => Effective.Deadline?.ToString("d.M.yyyy") ?? "";
+
+    public int PrioritySort => Triage.Priority(Item, blindMode());
+    public DateOnly DeadlineSort => Triage.DeadlineSort(Item, blindMode());
     public string Category => Item.CategoryStatus is null
         ? ""
         : $"Outlook-luokka: {Item.CategoryOwned ?? "ei sovelluksen luokkaa"} ({Display.Text("luokka_" + Item.CategoryStatus)})";
     public string ModelInfo => ShowAi ? $"{Item.Model} · {Item.PromptVersion}{(Item.Truncated ? " · sisältö katkaistu" : "")}" : "";
-
-    /// <summary>The user says it needs attention but the AI did not flag it.</summary>
-    public bool Missed =>
-        Item.Label is not null && Item.Assessment is not null &&
-        Labels.AttentionActions.Contains(Item.Label.Action) &&
-        !Labels.AttentionActions.Contains(Item.Assessment.Action) && Item.Assessment.Action != "tarkista";
 
     public string LabelInfo => Item.Label is null
         ? "Ei merkitty."
@@ -97,14 +107,6 @@ public sealed class ItemViewModel(ReviewItem item, Func<bool> blindMode, Display
           $"{(Item.Label.Blind ? ", sokkona" : "")}{(Item.Label.AgreesWithAi ? ", sama kuin AI" : "")}.";
 
     private const string Hidden = "•••";
-    private static readonly string[] ActionPriority = ["vastattava", "tehtava", "tarkista", "tiedoksi"];
-    private static readonly string[] UrgencyPriority = ["tanaan", "talla_viikolla", "myohemmin", "ei_maaraaikaa"];
-
-    private static int Rank(string[] order, string key)
-    {
-        var index = Array.IndexOf(order, key);
-        return index < 0 ? 9 : index;
-    }
 }
 
 public sealed class MainViewModel : ObservableObject, IDisposable
@@ -141,6 +143,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         AcceptAiCommand = new RelayCommand(AcceptAi, () => Selected?.ShowAi == true);
         DeleteLabelCommand = new RelayCommand(DeleteLabel, () => Selected?.IsLabeled == true);
         OpenCommand = new RelayCommand(OpenInOutlook, () => Selected is not null);
+        ToggleDoneCommand = new RelayCommand(ToggleDone, () => Selected is not null);
         ProcessNowCommand = new RelayCommand(() => _monitor?.Monitor.ProcessNow(), () => _monitor is not null && !MonitorPaused);
         TogglePauseCommand = new RelayCommand(TogglePause, () => _monitor is not null);
         Refresh();
@@ -169,7 +172,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     [
         new("huomio", "Vaatii huomiota"), new("kaikki", "Kaikki"), new("vastattava", "Vastattava"), new("tehtava", "Tehtävä"),
         new("tarkista", "Tarkista"), new("tiedoksi", "Tiedoksi"), new("merkitsematon", "Merkitsemättömät"),
-        new("huomiotta", "Huomiotta jääneet"), new("ongelmat", "Ongelmat ja jonossa"),
+        new("huomiotta", "Huomiotta jääneet"), new("ongelmat", "Ongelmat ja jonossa"), new(Triage.Done, "Hoidetut"),
     ];
 
     /// <summary>The mailbox column is redundant when one mailbox is chosen, and dropped in a narrow window.</summary>
@@ -205,6 +208,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public RelayCommand AcceptAiCommand { get; }
     public RelayCommand DeleteLabelCommand { get; }
     public RelayCommand OpenCommand { get; }
+    public RelayCommand ToggleDoneCommand { get; }
+    public string DoneButtonText => Selected?.IsDone == true ? "Palauta hoitamattomaksi (Ctrl+E)" : "Merkitse hoidetuksi (Ctrl+E)";
     public RelayCommand ProcessNowCommand { get; }
     public RelayCommand TogglePauseCommand { get; }
 
@@ -278,6 +283,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 OnPropertyChanged(nameof(HasSelection));
                 OnPropertyChanged(nameof(NoSelection));
+                OnPropertyChanged(nameof(DoneButtonText));
                 LoadEditor();
             }
         }
@@ -392,20 +398,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private static bool MatchesFilter(ItemViewModel vm, string filter)
-    {
-        var action = vm.ShowAi ? vm.Item.Assessment!.Action : null;
-        return filter switch
-        {
-            // The program's warnings count even in blind mode, where the action is hidden.
-            "huomio" => action is "vastattava" or "tehtava" or "tarkista" || vm.HasWarning,
-            "vastattava" or "tehtava" or "tarkista" or "tiedoksi" => action == filter,
-            "merkitsematon" => !vm.IsLabeled && vm.Item.Assessment is not null,
-            "huomiotta" => vm.Missed,
-            "ongelmat" => vm.Item.Status is not "assessed",
-            _ => true,
-        };
-    }
+    private bool MatchesFilter(ItemViewModel vm, string filter) => Triage.Matches(vm.Item, filter, BlindMode);
 
     private void LoadEditor()
     {
@@ -454,17 +447,50 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Reload(Selected.Id);
     }
 
-    /// <summary>After labelling, move to the next unlabelled message in the current view.</summary>
-    private void AdvanceAfterLabel(long labeledId)
+    /// <summary>
+    /// Marks the selected message done (or undoes it). Local only: nothing is written to
+    /// Outlook. When the row leaves the current view, the next row is selected.
+    /// </summary>
+    private void ToggleDone()
     {
-        // The view order before reloading: with the "unlabelled" filter the labelled row disappears.
-        var following = View.Cast<ItemViewModel>().Select(i => i.Id).SkipWhile(id => id != labeledId).Skip(1).ToList();
-        Reload(labeledId);
-        var byId = Items.ToDictionary(i => i.Id);
-        var nextId = following.FirstOrDefault(id => byId.TryGetValue(id, out var vm) && !vm.IsLabeled && vm.Item.Assessment is not null);
+        if (Selected is not { } vm)
+        {
+            return;
+        }
+
+        _store.SetDone(vm.Id, !vm.IsDone, DateTimeOffset.UtcNow);
+        // A row that stays in the view (e.g. "Kaikki") stays selected, so the change can be undone at once.
+        Advance(vm.Id, stayIfVisible: true, _ => true);
+    }
+
+    /// <summary>After labelling, move to the next unlabelled message in the current view.</summary>
+    private void AdvanceAfterLabel(long labeledId) =>
+        Advance(labeledId, stayIfVisible: false, vm => !vm.IsLabeled && vm.Item.Assessment is not null);
+
+    /// <summary>
+    /// Reloads after a change to <paramref name="changedId"/> and selects the next row after it
+    /// that satisfies <paramref name="next"/>. Without one, the changed row stays selected if
+    /// it is still in the view.
+    /// </summary>
+    private void Advance(long changedId, bool stayIfVisible, Func<ItemViewModel, bool> next)
+    {
+        // The view order before reloading: the changed row may leave the current filter.
+        var following = View.Cast<ItemViewModel>().Select(i => i.Id).SkipWhile(id => id != changedId).Skip(1).ToList();
+        Reload(changedId);
+        var visible = View.Cast<ItemViewModel>().ToDictionary(i => i.Id);
+        if (stayIfVisible && visible.ContainsKey(changedId))
+        {
+            return;
+        }
+
+        var nextId = following.FirstOrDefault(id => visible.TryGetValue(id, out var vm) && next(vm));
         if (nextId != 0)
         {
-            Selected = byId[nextId];
+            Selected = visible[nextId];
+        }
+        else if (!visible.ContainsKey(changedId))
+        {
+            Selected = null;
         }
     }
 

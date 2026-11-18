@@ -227,18 +227,19 @@
             <Setter Property="TextBlock.Foreground" Value="{StaticResource Ink}" />
             <Setter Property="TextBlock.FontSize" Value="12" />
             <Style.Triggers>
-                <DataTrigger Binding="{Binding ActionKey}" Value="">
+                <!-- The action key comes in Tag: the list shows the effective action, the AI card the AI's own. -->
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="">
                     <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding ActionKey}" Value="vastattava">
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="vastattava">
                     <Setter Property="Background" Value="{StaticResource Leaf}" />
                     <Setter Property="TextBlock.Foreground" Value="White" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding ActionKey}" Value="tehtava">
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="tehtava">
                     <Setter Property="Background" Value="{StaticResource Lake}" />
                     <Setter Property="TextBlock.Foreground" Value="White" />
                 </DataTrigger>
-                <DataTrigger Binding="{Binding ActionKey}" Value="tarkista">
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="tarkista">
                     <Setter Property="Background" Value="{StaticResource Cloudberry}" />
                     <Setter Property="TextBlock.Foreground" Value="{StaticResource Ink}" />
                 </DataTrigger>

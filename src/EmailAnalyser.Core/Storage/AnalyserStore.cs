@@ -29,7 +29,8 @@ public sealed record ReviewItem(
     string? PromptVersion,
     UserLabel? Label,
     string? CategoryOwned = null,
-    string? CategoryStatus = null);
+    string? CategoryStatus = null,
+    DateTimeOffset? DoneAt = null);
 
 /// <summary>This application's category state for one message.</summary>
 public sealed record CategoryState(string? Desired, string? Owned, string Status, int Attempts);
@@ -86,7 +87,7 @@ public sealed record AssessmentReport(
 /// </summary>
 public sealed class AnalyserStore : IDisposable
 {
-    private const int SchemaVersion = 3;
+    private const int SchemaVersion = 4;
     public const int MaxMessageAttempts = 3;
     private readonly SqliteConnection _db;
 
@@ -301,12 +302,13 @@ public sealed class AnalyserStore : IDisposable
                    a.id, a.valid, a.summary, a.rationale, a.topic, a.action, a.urgency, a.deadline, a.needs_review,
                    a.review_reasons, a.truncated, a.model, a.prompt_version,
                    l.action, l.urgency, l.topic, l.deadline, l.agrees_with_ai, l.split, l.blind, l.labeled_utc,
-                   c.owned, c.status
+                   c.owned, c.status, d.done_utc
             FROM messages m
             LEFT JOIN (SELECT message_id, max(id) AS id FROM assessments GROUP BY message_id) la ON la.message_id = m.id
             LEFT JOIN assessments a ON a.id = la.id
             LEFT JOIN labels l ON l.message_id = m.id
             LEFT JOIN category_state c ON c.message_id = m.id
+            LEFT JOIN done d ON d.message_id = m.id
             ORDER BY m.received_utc DESC
             """);
         using var r = cmd.ExecuteReader();
@@ -334,10 +336,25 @@ public sealed class AnalyserStore : IDisposable
                 ParseUtc(r.GetString(7)), r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9),
                 r.IsDBNull(10) ? null : r.GetInt64(10), assessment, !r.IsDBNull(20) && r.GetInt32(20) == 1,
                 r.IsDBNull(21) ? null : r.GetString(21), r.IsDBNull(22) ? null : r.GetString(22), label,
-                r.IsDBNull(31) ? null : r.GetString(31), r.IsDBNull(32) ? null : r.GetString(32)));
+                r.IsDBNull(31) ? null : r.GetString(31), r.IsDBNull(32) ? null : r.GetString(32),
+                r.IsDBNull(33) ? null : ParseUtc(r.GetString(33))));
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Marks a message done in this application only, or undoes it. Nothing is written to
+    /// Outlook, and the label and assessments are kept.
+    /// </summary>
+    public void SetDone(long messageId, bool done, DateTimeOffset now)
+    {
+        using var cmd = Command(done
+            ? "INSERT INTO done (message_id, done_utc) VALUES ($id, $now) ON CONFLICT (message_id) DO NOTHING"
+            : "DELETE FROM done WHERE message_id = $id");
+        cmd.Parameters.AddWithValue("$id", messageId);
+        cmd.Parameters.AddWithValue("$now", Utc(now));
+        cmd.ExecuteNonQuery();
     }
 
     /// <summary>Saves or replaces the user's label. Returns the stored label with split and agreement.</summary>
@@ -609,6 +626,13 @@ public sealed class AnalyserStore : IDisposable
         {
             cmd.Parameters.AddWithValue("$cutoff", Utc(cutoff));
             redacted = cmd.ExecuteNonQuery();
+        }
+
+        // Done marks are working state, not something to keep: kept messages lose them too.
+        using (var cmd = Command("DELETE FROM done WHERE message_id IN (SELECT id FROM messages WHERE received_utc < $cutoff)", tx))
+        {
+            cmd.Parameters.AddWithValue("$cutoff", Utc(cutoff));
+            cmd.ExecuteNonQuery();
         }
 
         using (var cmd = Command("""
@@ -1048,6 +1072,20 @@ public sealed class AnalyserStore : IDisposable
                 );
                 CREATE INDEX ix_category_log_message ON category_log (message_id);
                 PRAGMA user_version = 3;
+                """, tx);
+            cmd.ExecuteNonQuery();
+            tx.Commit();
+        }
+
+        if (version < 4)
+        {
+            using var tx = _db.BeginTransaction();
+            using var cmd = Command("""
+                CREATE TABLE done (
+                    message_id INTEGER PRIMARY KEY REFERENCES messages (id) ON DELETE CASCADE,
+                    done_utc TEXT NOT NULL
+                );
+                PRAGMA user_version = 4;
                 """, tx);
             cmd.ExecuteNonQuery();
             tx.Commit();

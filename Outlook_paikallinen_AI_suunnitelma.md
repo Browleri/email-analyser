@@ -347,9 +347,15 @@ Toteutusjärjestys:
 
 Kohdat 1–2 tehdään ennen otoksen merkintää ja luokkien kytkemistä päälle, koska ne vaikuttavat siihen, mitä käyttäjä näkee huomiota vaativina. Muutokset eivät lisää verkkoyhteyksiä tai Outlook-kirjoituksia, joten tietoturva-arviota ei tarvitse päivittää.
 
+Kohdat 1–2 toteutettiin 18.11.2026:
+- **Tehokas luokitus (`Triage` Coressa):** suodattimet, Arvio-sarakkeen värimerkki, määräaika ja tärkeysjärjestys käyttävät omaa merkintää ja ilman sitä AI-arviota. Sääntö on sama kuin Outlook-luokilla, ja yksikkötesti varmistaa, että ne täsmäävät. Merkin vihje kertoo lähteen. Tietopaneelin AI-kortti näyttää mallin oman arvion.
+- **Varoitukset:** varoitettu viesti on "Vaatii huomiota" -näkymässä, kunnes käyttäjä merkitsee sen. Merkintä ratkaisee, kuten Outlook-luokassakin. Varoitusmerkki, punainen rivi ja banneri jäävät näkyviin.
+- **Hoidettu:** tietokannan versio 4 lisää taulun `done`. Ctrl+E tai paneelin painike kuittaa viestin tai peruu kuittauksen. Hoidettu viesti poistuu huomio- ja toimenpidesuodattimista ja himmenee Kaikki-näkymässä, mutta se jää suodattimiin Merkitsemättömät, Huomiotta jääneet, Ongelmat ja Hoidetut. Outlookiin ei kirjoiteta mitään, ja merkintä ja arviot säilyvät. Säilytysaika poistaa kuittauksen myös viesteistä, joiden tunnisteet säilytetään.
+- **Testit:** `TriageTests` ja `DoneStateTests` (8). Peitetyt kuvakaappaukset läpäisivät vuototarkistuksen.
+
 Merkintöjen vienti ja tuonti toteutettiin 18.11.2026 ennen otoksen merkintää (ks. Säilytys ja varmuuskopiointi, tietoturva-arvion R34–R35).
 
-Jäljellä vaiheessa 3: toteutusjärjestyksen kohdat 1–2, minkä jälkeen käyttäjä merkitsee otoksen näkymässä ja vie merkinnät jokaisen kierroksen jälkeen. Sitten löytymisosuus ja turhat hälytykset mitataan arviointiosasta, ja jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
+Jäljellä vaiheessa 3: käyttäjä merkitsee otoksen näkymässä ja vie merkinnät jokaisen kierroksen jälkeen. Toteutusjärjestyksen kohdat 3–4 (sokkotilan selitys, tallentamattoman merkinnän varoitus, seurannan tilan jäsentely ja automaattinen päivitys) voi tehdä merkinnän rinnalla; kohta 3 on hyödyllinen ennen sokkomerkintää. Sitten löytymisosuus ja turhat hälytykset mitataan arviointiosasta, ja jokainen huomiotta jäänyt viesti käydään läpi suodattimella "Huomiotta jääneet".
 
 ### 4. Tietoturvan arviointi
 
