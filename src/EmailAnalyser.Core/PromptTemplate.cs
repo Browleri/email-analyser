@@ -7,19 +7,25 @@ namespace EmailAnalyser.Core;
 
 /// <summary>
 /// The classification prompt and JSON schema, embedded from the Prompts folder.
-/// <see cref="Version"/> changes whenever any of the three files changes, and is
+/// <see cref="Version"/> changes whenever any of the three files or <see cref="ProgramRules"/> changes, and is
 /// stored with every assessment.
 /// </summary>
 public sealed class PromptTemplate
 {
     public const string Name = "classify-v1";
 
+    /// <summary>
+    /// Program rules that change how the model's answer is turned into an assessment.
+    /// Part of <see cref="Version"/>, so a rule change also re-versions every assessment.
+    /// </summary>
+    public const string ProgramRules = "urgency-from-deadline";
+
     private PromptTemplate(string system, string user, string schema)
     {
         System = system;
         UserTemplate = user;
         SchemaJson = schema;
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(system + "\u0000" + user + "\u0000" + schema));
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(system + "\u0000" + user + "\u0000" + schema + "\u0000" + ProgramRules));
         Version = $"{Name}-{Convert.ToHexString(hash)[..8].ToLowerInvariant()}";
     }
 

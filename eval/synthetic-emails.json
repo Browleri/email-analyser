@@ -3,7 +3,8 @@
   "userContext": [
     "Käyttäjän omat sijoitukset tehdään suoraan tai Esimerkki Invest Oy:n kautta.",
     "Perheyhtiö on Esimerkki Sukuyhtiö Oy; sen sijoitukset ovat aihetta perheyhtio.",
-    "Käyttäjän enkelisijoitukset (kohdeyhtiot): Startup Oy, Kasvu Oy ja Sovellus Oy."
+    "Käyttäjän enkelisijoitukset (kohdeyhtiot): Startup Oy, Kasvu Oy ja Sovellus Oy.",
+    "Käyttäjä on Esimerkkiyhdistys ry:n (yhdistys@example.org) hallituksessa."
   ],
   "cases": [
     {
@@ -367,7 +368,7 @@
       "received": "2026-11-16T11:00:00+02:00",
       "subject": "KUTSU: Jouluvastaanotto 17.12.2026",
       "body": "Lämpimästi tervetuloa jouluvastaanotollemme torstaina 17.12.2026 klo 18 alkaen. Tarjolla on pientä syötävää ja livemusiikkia. Voit ottaa seuralaisen mukaan. Ilmoittauduthan 10.12.2026 mennessä.",
-      "expect": { "toimenpide": ["tehtava", "tiedoksi", "vastattava"], "aihe": ["tapahtumat"] }
+      "expect": { "toimenpide": ["tehtava"], "kiireellisyys": ["myohemmin"], "maaraaika": "2026-12-10", "aihe": ["tapahtumat"] }
     },
     {
       "id": "github-ilmoitus",
@@ -376,6 +377,150 @@
       "subject": "Re: [org/platform] docs: playbook update (PR #1539)",
       "body": "Closed #1539. Reply to this email directly, view it on GitHub, or unsubscribe. You are receiving this because you authored the thread.",
       "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["ilmoitukset", "tyo"] }
+    },
+    {
+      "id": "myyntiyhteydenotto",
+      "mailbox": "tyo@example.fi", "from": "Mika Myyjä", "fromAddress": "mika@operaattori.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T08:45:00+02:00",
+      "subject": "Yrityksen liittymät kilpailutukseen?",
+      "body": "Hei,\n\nhuomasin, että yrityksenne liittymäsopimus voi olla useamman vuoden takaa. Tarjoamme kiinteän yhteyden, toimiston langattoman verkon ja palomuurin samalla kuukausimaksulla. Ehtisitkö lyhyelle esittelypuhelulle tiistaina tai keskiviikkona?\n\nYstävällisin terveisin\nMika, myynti",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["uutiskirje"] }
+    },
+    {
+      "id": "myyjan-muistutus",
+      "mailbox": "oma@example.com", "from": "Luis (Signing Service)", "fromAddress": "luis@signing.example", "to": "Me", "cc": "",
+      "received": "2026-11-16T10:07:00+02:00",
+      "subject": "Re: Still interested in the trial?",
+      "body": "Hi,\n\njust following up on my last note. Your trial of our document signing tool ends soon - shall I set up a quick call to go through the paid plans?\n\nBest, Luis | Account Executive",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["uutiskirje"] }
+    },
+    {
+      "id": "sijoitusvinkki-uutiskirje",
+      "mailbox": "sijoitukset@example.fi", "from": "Quality Compounder", "fromAddress": "qualitycompounder@newsletter.example", "to": "Minä", "cc": "",
+      "received": "2026-11-16T16:36:00+02:00",
+      "subject": "Our top pick for next year is revealed tonight",
+      "body": "Do not be the last to know.\n\nHi reader, our analysts have found a company they call the deal of the decade. Premium members get the ticker and the full report tonight. Join premium today at half price.\n\nGot this from a friend? Sign up for free updates.",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["uutiskirje", "markkinat"] }
+    },
+    {
+      "id": "pankin-webinaari",
+      "mailbox": "sijoitukset@example.fi", "from": "Pankki Varainhoito", "fromAddress": "uutiset@pankki.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T10:32:00+02:00",
+      "subject": "Kutsu: Sijoitusvuosi 2027 -verkkotilaisuus 1.12.2026",
+      "body": "Tervetuloa verkkotilaisuuteemme, jossa salkunhoitajamme käyvät läpi kuluneen vuoden ja ensi vuoden näkymät. Tiistaina 1.12.2026 klo 16.00–16.45. Ilmoittaudu mukaan alla olevasta painikkeesta.\n\nAvaa selaimessa | Lopeta tilaus",
+      "expect": { "toimenpide": ["tehtava"], "kiireellisyys": ["myohemmin"], "aihe": ["tapahtumat"] }
+    },
+    {
+      "id": "saapumisohjeet",
+      "mailbox": "sijoitukset@example.fi", "from": "Lasse (Example VC)", "fromAddress": "lasse@examplevc.example", "to": "Minä", "cc": "",
+      "received": "2026-11-16T17:04:00+02:00",
+      "subject": "Founders & Funds Breakfast tomorrow - practical info",
+      "body": "Hello! See you tomorrow, Tuesday 17 November, at the Founders & Funds Breakfast.\n\nDoors 8:00, program until 10:00\nPlace: Hotel Example, Helsinki. Enter from the courtyard; your name is on the guest list.\n\nThe team",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["tapahtumat"] }
+    },
+    {
+      "id": "asiakaslounas-kutsu",
+      "mailbox": "sijoitukset@example.fi", "from": "Pankki Private Banking", "fromAddress": "private.events@pankki.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T08:58:00+02:00",
+      "subject": "Kutsu | Talousnäkymät-lounas 10.12.2026",
+      "body": "Arvoisa asiakkaamme,\n\ntervetuloa lounaalle, jossa pääekonomistimme kertoo ensi vuoden talousnäkymistä. Torstaina 10.12.2026 klo 11.45–13.00, Helsingin konttorimme kokoustila. Pyydämme ilmoittautumaan 3.12.2026 mennessä.\n\nLämpimästi tervetuloa!",
+      "expect": { "toimenpide": ["tehtava"], "kiireellisyys": ["myohemmin"], "maaraaika": "2026-12-03", "aihe": ["tapahtumat"] }
+    },
+    {
+      "id": "linkedin-yhteyspyynto",
+      "mailbox": "oma@example.com", "from": "Anna Sijoittaja", "fromAddress": "invitations@linkedin.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T02:56:00+02:00",
+      "subject": "Anna Sijoittaja wants to connect",
+      "body": "Anna Sijoittaja, Partner at Example Ventures, sent you an invitation to connect.\n\nAccept | Ignore\n\nYou have 3 mutual connections",
+      "expect": { "toimenpide": ["vastattava"], "kiireellisyys": ["ei_maaraaikaa", "myohemmin"], "aihe": ["henkilokohtainen"] }
+    },
+    {
+      "id": "joukkovelkakirja-anti",
+      "mailbox": "sijoitukset@example.fi", "from": "Pankki Fixed Income", "fromAddress": "fixedincome@pankki.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T08:30:00+02:00",
+      "subject": "BOOKS OPEN: Esimerkki Finance EUR 100m 5NC2 senior secured bond",
+      "body": "BOOKS OPEN\n- Issuer: Esimerkki Finance Oyj\n- Size: EUR 100m, tenor 5 years\n- Price talk: 3m Euribor + 600-625 bps\n- Orderbook closes today at 14:30 CET\n\nEsimerkki Finance buys and services consumer loan portfolios in Europe. Please send your orders to the sales desk today.",
+      "expect": { "toimenpide": ["vastattava", "tehtava"], "kiireellisyys": ["tanaan"], "aihe": ["sijoitusmahdollisuudet"] }
+    },
+    {
+      "id": "yhdistyksen-hallitus",
+      "mailbox": "yhdistys@example.org", "from": "Puheenjohtaja Paula", "fromAddress": "paula@esimerkkiyhdistys.example", "to": "Hallitus", "cc": "",
+      "received": "2026-11-17T07:40:00+02:00",
+      "subject": "Hallituksen kokous 26.11.",
+      "body": "Hei hallitus,\n\nseuraava kokous on torstaina 26.11. klo 18 Teamsissa. Esityslistalla ensi vuoden budjetti ja jäsenmaksut. Kerrothan 20.11. mennessä, pääsetkö paikalle.\n\nPaula",
+      "expect": { "toimenpide": ["vastattava"], "kiireellisyys": ["talla_viikolla"], "maaraaika": "2026-11-20", "aihe": ["tyo"] }
+    },
+    {
+      "id": "teams-kollega",
+      "mailbox": "tyo@example.fi", "from": "Kalle Kollega in Teams", "fromAddress": "noreply@teams.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T08:29:00+02:00",
+      "subject": "Kalle Kollega sent a message",
+      "body": "Hi, Kalle Kollega sent a message in Projekti General Chat: \"Kiitos kaikille, hyvä palaveri eilen!\"\n\nReply in Teams | Install Microsoft Teams now",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["tyo"] }
+    },
+    {
+      "id": "kayttoehtomuutos",
+      "mailbox": "oma@example.com", "from": "Maksupalvelu", "fromAddress": "news@maksupalvelu.example", "to": "Minä", "cc": "",
+      "received": "2026-11-17T06:05:00+02:00",
+      "subject": "We are updating our terms",
+      "body": "Hello, we are making changes to our user agreement and privacy policy to support new optional features. The new terms apply from 1 January 2027. No action is required from you.",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["ilmoitukset", "hallinto"] }
+    },
+    {
+      "id": "kutsumuistutus",
+      "mailbox": "sijoitukset@example.fi", "from": "Example VC", "fromAddress": "examplevc@calendar.example", "to": "Minä", "cc": "",
+      "received": "2026-11-16T08:57:00+02:00",
+      "subject": "Last call: RSVP for the Example VC founders & investors evening",
+      "body": "Hi there! Startup week is here and spots for our founders & investors evening are almost gone. Make sure you have registered.\n\nWednesday 18 November, 17:00 · Address shared after registration\n\nRegister | Unsubscribe from Example VC",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["tapahtumat"] }
+    },
+    {
+      "id": "myyntitilaisuus",
+      "mailbox": "oma@example.com", "from": "Mikko Myyntivalmentaja", "fromAddress": "info@closingclub.example", "to": "Minä", "cc": "",
+      "received": "2026-11-13T13:43:00+02:00",
+      "subject": "An invitation for you",
+      "body": "Hi,\n\nI am hosting a seminar for business leaders, \"Double Your Pipeline in 90 Days\", in Helsinki on 26 November. If you lead a sales team, I think the session would be worth your time. Seats are limited, so book your ticket soon.\n\nKind regards, Mikko",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["tapahtumat", "uutiskirje"] }
+    },
+    {
+      "id": "ilmoittautuneille",
+      "mailbox": "sijoitukset@example.fi", "from": "Tapahtuman järjestäjä", "fromAddress": "host@calendar.example", "to": "Minä", "cc": "",
+      "received": "2026-11-16T15:34:00+02:00",
+      "subject": "Update from the host: Startup Week Charity Poker",
+      "body": "Hi everyone, the tables are ready for tonight! Registration desk opens at 17:00 - remember to bring a photo ID. You can find the venue address in your ticket.\n\n16 November, 17:00 · Katuosoite 1\n\nYou got this message because you signed up for this event.",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["tapahtumat"] }
+    },
+    {
+      "id": "tapahtumakalenteri",
+      "mailbox": "sijoitukset@example.fi", "from": "Yrittäjäliitto", "fromAddress": "uutiset@yrittajaliitto.example", "to": "Minä", "cc": "",
+      "received": "2026-11-16T12:49:00+02:00",
+      "subject": "Tapahtumat viikolla 47",
+      "body": "Hei,\n\nkoostimme tämän viikon ja tulevien viikkojen tapahtumat: jäsenten pikkujoulut, aamukahviseminaari ja alueiden verkostoillat. Muista myös, että johtamisvalmennuksen alennettu hinta on voimassa kuun loppuun.\n\nKaikki tapahtumat | Lopeta tilaus",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["tapahtumat", "uutiskirje"] }
+    },
+    {
+      "id": "kutsun-korjaus",
+      "mailbox": "tyo@example.fi", "from": "Kalle Kumppani", "fromAddress": "kalle@kumppanirahasto.example", "to": "Minä", "cc": "",
+      "received": "2026-11-13T15:52:00+02:00",
+      "subject": "RE: Kutsu Startup Week -iltaan",
+      "body": "Hups, välitin kutsun niin, että toisen vastaanottajan osoite jäi näkyviin. Jos lähetät kutsua eteenpäin, poistathan sen sieltä.\n\nKalle\n\n-----\nAihe: Kutsu Startup Week -iltaan",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["tapahtumat", "tyo"] }
+    },
+    {
+      "id": "muu-kohderyhma",
+      "mailbox": "sijoitukset@example.fi", "from": "Example Ventures", "fromAddress": "examplevc@calendar.example", "to": "Minä", "cc": "",
+      "received": "2026-11-16T11:11:00+02:00",
+      "subject": "Build your first app in one evening - Example Ventures Builders Night",
+      "body": "Got a startup idea? Founders and students: come build a working prototype with mentors from our partners. Tuesday 1 December, 17-21, pizza included.\n\nSign up | Unsubscribe",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["tapahtumat"] }
+    },
+    {
+      "id": "tuttavan-kutsu",
+      "mailbox": "tyo@example.fi", "from": "Kalle Kumppani", "fromAddress": "kalle@kumppanirahasto.example", "to": "Minä", "cc": "",
+      "received": "2026-11-13T12:33:00+02:00",
+      "subject": "Kutsu: Startup Week -iltamme torstaina",
+      "body": "Hei,\n\nkiva kun ehdittiin vaihtaa kuulumiset eilen. Järjestämme ensi viikolla torstaina 19.11. klo 15–19 vapaamuotoisen illan, jossa on mukana rahastomme yhtiöitä ja muita sijoittajia. Tule, kun sinulle sopii.\n\nKalle",
+      "expect": { "toimenpide": ["tehtava"], "aihe": ["tapahtumat"] }
     }
   ]
 }

@@ -124,6 +124,30 @@ public class AssessmentValidatorTests
     public void Non_objects_are_rejected(string json) =>
         Assert.False(AssessmentValidator.Validate(json, false).IsValid);
 
+    [Theory]
+    [InlineData("talla_viikolla", "2026-12-03", "myohemmin")]
+    [InlineData("myohemmin", "2026-11-20", "talla_viikolla")]
+    [InlineData("ei_maaraaikaa", "2026-11-19", "tanaan")]
+    [InlineData("tanaan", "2026-12-10", "tanaan")]
+    [InlineData("myohemmin", "2026-11-25", "talla_viikolla")]
+    [InlineData("talla_viikolla", "2026-11-26", "myohemmin")]
+    [InlineData("myohemmin", "2026-11-01", "myohemmin")]
+    public void Urgency_follows_the_deadline(string modelUrgency, string deadline, string expected)
+    {
+        var json = Valid.Replace("\"kiireellisyys\":\"tanaan\"", $"\"kiireellisyys\":\"{modelUrgency}\"")
+            .Replace("\"maaraaika\":\"2026-11-18\"", $"\"maaraaika\":\"{deadline}\"");
+        var a = AssessmentValidator.Validate(json, false).Assessment!;
+        Assert.Equal(expected, AssessmentValidator.AlignUrgency(a, new DateOnly(2026, 11, 18)).Urgency);
+    }
+
+    [Fact]
+    public void Urgency_without_deadline_is_the_models()
+    {
+        var json = Valid.Replace("\"kiireellisyys\":\"tanaan\"", "\"kiireellisyys\":\"myohemmin\"").Replace("\"2026-11-18\"", "null");
+        var a = AssessmentValidator.Validate(json, false).Assessment!;
+        Assert.Equal("myohemmin", AssessmentValidator.AlignUrgency(a, new DateOnly(2026, 11, 18)).Urgency);
+    }
+
     [Fact]
     public void Review_reasons_imply_review()
     {

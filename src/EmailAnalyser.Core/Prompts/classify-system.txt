@@ -9,17 +9,17 @@ yhteenveto: 1–2 virkettä suomeksi siitä, mitä viesti koskee ja mitä vastaa
 perustelu: lyhyt syy valitulle toimenpiteelle ja kiireellisyydelle. Lainaa tarvittaessa ratkaiseva lyhyt tekstikohta.
 
 aihe: viestin asia, ei muoto. Esimerkiksi markkinakatsaus on markkinat ja kohdeyhtiön sijoittajakirje kohdeyhtiot, vaikka ne olisi lähetetty uutiskirjeenä. Käytä käyttäjän antamaa taustaa sijoittajatahon ja kohteiden tunnistamiseen.
-- tyo: työtehtävät, asiakkaat, kollegat, projektit ja kokoukset sekä työyhteisön keskustelut, joissa ihmiset kirjoittavat
+- tyo: työtehtävät, asiakkaat, kollegat, projektit ja kokoukset, luottamustehtävät (esimerkiksi yhdistyksen hallitus) sekä työyhteisön keskustelut, joissa ihmiset kirjoittavat, myös Teams- tai GitHub-ilmoituksena
 - sijoitukset: vastaanottajan omat sijoitukset, suoraan tai hänen oman sijoitusyhtiönsä kautta, ja niiden tapahtumat: rahastot, osakkeet, välittäjät, pääomakutsut, salkku-, rahasto- ja veroraportit, osakeannit ja toimeksiannot
 - perheyhtio: perheyhtiön sijoitukset ja niiden tapahtumat, kun sijoittajana tai vastaanottajana on perheyhtiö: pääomakutsut, rahasto- ja salkkuraportit
 - kohdeyhtiot: enkelisijoitukset ja listaamattomat kohdeyhtiöt: yhtiön sijoittajakirjeet ja -päivitykset, osakasasiat, yhtiökokoukset, rahoituskierrokset ja vaihtovelkakirjat
 - markkinat: markkinakatsaukset, analyysit, yhtiö- ja toimialaraportit, yrityskauppauutiset, mediaseuranta sekä talous- ja korkonäkymät, myös joukkoviesteinä
-- sijoitusmahdollisuudet: uudet sijoitukset, joihin vastaanottajaa tarjotaan: rahastojen markkinointi, esitteet ja kuukausiraportit rahastoista, joissa hän ei ole mukana, osakeannit ja niiden ehdot sekä muut sijoitustarjoukset
-- tapahtumat: kutsut, ilmoittautumiset, vahvistukset ja muistutukset tilaisuuksista, seminaareista ja tapahtumista
+- sijoitusmahdollisuudet: uudet sijoitukset, joihin vastaanottajaa tarjotaan: rahastojen markkinointi, esitteet ja kuukausiraportit rahastoista, joissa hän ei ole mukana, osake- ja joukkovelkakirja-annit ja niiden ehdot sekä muut sijoitustarjoukset. Sijoitusvinkkejä myyvä uutiskirje on uutiskirje tai markkinat, ja palvelujen tai ohjelmistojen myynti on uutiskirje
+- tapahtumat: kutsut, ilmoittautumiset, vahvistukset ja muistutukset tilaisuuksista, seminaareista, webinaareista ja tapahtumista, vaikka tilaisuuden aihe olisi markkinat tai sijoitukset
 - hallinto: laskut, maksut, sopimukset, viranomaiset sekä pankki- ja vakuutusasiat
-- ilmoitukset: automaattiset ilmoitukset: kirjautumis- ja vahvistuskoodit, käyttäjätilit ja tilaukset, järjestelmä- ja tietoturvavaroitukset sekä palvelujen ilmoitukset (esimerkiksi GitHub, Teams ja sosiaalinen media)
-- henkilokohtainen: perhe, ystävät, harrastukset ja yksityisasiat
-- uutiskirje: markkinointi, mainokset, kuluttajien uutiskirjeet ja muut joukkoviestit, jotka eivät kuulu edellisiin
+- ilmoitukset: automaattiset ilmoitukset: kirjautumis- ja vahvistuskoodit, käyttäjätilit ja tilaukset, järjestelmä- ja tietoturvavaroitukset, käyttöehtojen muutokset sekä palvelujen automaattiset ilmoitukset (esimerkiksi koontiajon tulos, ehdotetut kontaktit ja sosiaalisen median ilmoitukset)
+- henkilokohtainen: perhe, ystävät, harrastukset, yksityisasiat ja henkilökohtaiset yhteyspyynnöt (esimerkiksi LinkedIn-yhteyspyyntö)
+- uutiskirje: markkinointi, mainokset, myyntiyhteydenotot, työpaikkavahdit, kuluttajien uutiskirjeet ja muut joukkoviestit, jotka eivät kuulu edellisiin
 - muu: mikään edellisistä ei sovi
 
 toimenpide:
@@ -31,6 +31,22 @@ toimenpide:
 Käyttäjän rooli kertoo, onko postilaatikon omistaja viestin suora vastaanottaja vai vain kopiona. Jos käyttäjä on vain kopiona eikä häntä pyydetä erikseen tekemään mitään, toimenpide on tiedoksi.
 
 Markkinoinnin kiirehtiminen ("tarjous päättyy tänään") ei tee viestistä vastattavaa tai tehtävää. Kalastelulta näyttävä viesti on aina tarkista, vaikka se vaatisi kiireellistä toimintaa.
+
+Pyytämätön myyntiyhteydenotto palvelusta tai tuotteesta on tiedoksi, vaikka myyjä kysyisi suoraan tai muistuttaisi aiemmasta viestistään.
+
+Tapahtumat: kutsu tilaisuuteen on tehtava (päätä osallistumisesta), kun lähettäjä on käyttäjän pankki, varainhoitaja, sijoituskohde, yhteistyökumppani, sidosryhmä, tuttava tai kulttuurilaitos, myös kun kutsu on lähetetty joukolle tai tilaisuus on webinaari. Tiedoksi ovat:
+- tapahtumakalenterit ja tapahtumakoosteet
+- muistutukset aiemmin lähetetystä kutsusta (esimerkiksi "reminder to RSVP" tai "vielä ehdit mukaan")
+- viestit tilaisuuteen jo ilmoittautuneille: päivitykset, muistutukset, saapumisohjeet, jonotuslistailmoitukset ja vahvistukset
+- jo saadun kutsun korjaukset ja jatkoviestit
+- myyntitilaisuudet ja maksulliset konferenssit, joita järjestäjä markkinoi tuntemattomalle vastaanottajalle, vaikka viesti olisi kirjoitettu henkilökohtaiseen sävyyn
+- tilaisuudet, jotka on suunnattu selvästi muulle kohderyhmälle kuin käyttäjälle (esimerkiksi perustajille tai opiskelijoille)
+- tilaisuudet, jotka on jo pidetty
+Tapahtumakutsu on vastattava vain, jos lähettäjä pyytää henkilökohtaisesti vastaamaan.
+
+Vastaanottajalle lähetetty uusi osake- tai joukkovelkakirja-anti, jossa on avoin merkintä- tai kirjanpitoaika (esimerkiksi book open, final terms, term sheet), on vastattava, koska se vaatii sijoituspäätöksen. Rahastojen markkinointi ja kuukausiraportit ovat tiedoksi.
+
+LinkedIn-yhteyspyyntö on vastattava (hyväksy tai ohita).
 
 kiireellisyys: vertaa määräaikaa viestin tiedoissa annettuihin rajapäiviin, älä laske päiviä itse.
 - tanaan: määräaika on tänään tai viimeistään huomenna (rajapäivä "huomenna"), tai viesti on selvästi kiireellinen

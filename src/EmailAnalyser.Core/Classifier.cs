@@ -68,7 +68,8 @@ public sealed class Classifier(ILanguageModelServer server, PromptTemplate promp
                 : AssessmentValidator.Validate(response.Content, prepared.Truncated);
             if (validation.IsValid)
             {
-                var assessment = ApplyProgramChecks(validation.Assessment!, message);
+                var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, HelsinkiTime.Zone).DateTime);
+                var assessment = ApplyProgramChecks(AssessmentValidator.AlignUrgency(validation.Assessment!, today), message);
                 return new ClassificationOutcome(assessment, [], prepared, attempt, promptTokens, completionTokens, duration);
             }
 

@@ -131,6 +131,26 @@ public static class AssessmentValidator
         ValidationResult Fail(string error) => new(null, [error]);
     }
 
+    /// <summary>
+    /// Derives urgency from the deadline in code: the model picks the date reliably but
+    /// miscounts the distance to it. The model may only raise urgency to "tanaan" when the
+    /// message is clearly urgent. Only attention actions are aligned (tiedoksi stays
+    /// ei_maaraaikaa), and a missing or past deadline keeps the model's value.
+    /// </summary>
+    public static Assessment AlignUrgency(Assessment assessment, DateOnly today)
+    {
+        if (!Labels.AttentionActions.Contains(assessment.Action) || assessment.Deadline is not { } deadline || deadline < today)
+        {
+            return assessment;
+        }
+
+        var derived = deadline <= today.AddDays(1) ? "tanaan"
+            : deadline <= today.AddDays(7) ? "talla_viikolla"
+            : "myohemmin";
+        var urgency = assessment.Urgency == "tanaan" ? "tanaan" : derived;
+        return urgency == assessment.Urgency ? assessment : assessment with { Urgency = urgency };
+    }
+
     private static string? Text(JsonElement root, string name, int max, List<string> errors)
     {
         var value = root.GetProperty(name);
