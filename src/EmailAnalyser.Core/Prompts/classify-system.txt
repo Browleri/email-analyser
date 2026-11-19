@@ -34,15 +34,18 @@ Markkinoinnin kiirehtiminen ("tarjous päättyy tänään") ei tee viestistä va
 
 Pyytämätön myyntiyhteydenotto palvelusta tai tuotteesta on tiedoksi, vaikka myyjä kysyisi suoraan tai muistuttaisi aiemmasta viestistään.
 
-Tapahtumat: kutsu tilaisuuteen on tehtava (päätä osallistumisesta), kun lähettäjä on käyttäjän pankki, varainhoitaja, sijoituskohde, yhteistyökumppani, sidosryhmä, tuttava tai kulttuurilaitos, myös kun kutsu on lähetetty joukolle tai tilaisuus on webinaari. Tiedoksi ovat:
-- tapahtumakalenterit ja tapahtumakoosteet
-- muistutukset aiemmin lähetetystä kutsusta (esimerkiksi "reminder to RSVP" tai "vielä ehdit mukaan")
-- viestit tilaisuuteen jo ilmoittautuneille: päivitykset, muistutukset, saapumisohjeet, jonotuslistailmoitukset ja vahvistukset
-- jo saadun kutsun korjaukset ja jatkoviestit
-- myyntitilaisuudet ja maksulliset konferenssit, joita järjestäjä markkinoi tuntemattomalle vastaanottajalle, vaikka viesti olisi kirjoitettu henkilökohtaiseen sävyyn
-- tilaisuudet, jotka on suunnattu selvästi muulle kohderyhmälle kuin käyttäjälle (esimerkiksi perustajille tai opiskelijoille)
-- tilaisuudet, jotka on jo pidetty
-Tapahtumakutsu on vastattava vain, jos lähettäjä pyytää henkilökohtaisesti vastaamaan.
+Tapahtumat: käy kohdat läpi järjestyksessä ja valitse ensimmäinen, joka sopii.
+1. Tiedoksi, jos viesti on jokin seuraavista, vaikka siinä kehotettaisiin ilmoittautumaan tai sävy olisi henkilökohtainen:
+   - tapahtumakalenteri tai usean tapahtuman kooste
+   - muistutus aiemmin lähetetystä kutsusta (otsikossa esimerkiksi "reminder", "muistutus", "last call" tai "vielä ehdit mukaan")
+   - viesti tilaisuuteen jo ilmoittautuneille: päivitys, saapumisohje, jonotuslista tai vahvistus
+   - vastaus tai jatkoviesti jo saatuun kutsuun (otsikko alkaa esimerkiksi "RE:" tai "VS:"), jossa vastaanottajalta ei kysytä mitään
+   - myyntitilaisuus, maksullinen konferenssi, kurssi, valmennus tai tutkinto, jota järjestäjä markkinoi vastaanottajalle, jota se ei tunne
+   - tilaisuus, joka on suunnattu selvästi muulle kohderyhmälle kuin käyttäjälle (esimerkiksi perustajille tai opiskelijoille)
+   - tilaisuus, jonka ajankohta on jo mennyt nykyhetkeen verrattuna
+2. Vastattava, jos lähettäjä pyytää henkilökohtaisesti vastaamaan hänelle.
+3. Tehtava (päätä osallistumisesta), jos lähettäjä on käyttäjän pankki, varainhoitaja, sijoituskohde, yhteistyökumppani, sidosryhmä, tuttava tai kulttuurilaitos, myös kun kutsu on lähetetty joukolle tai tilaisuus on webinaari.
+4. Muut kutsut ovat tiedoksi.
 
 Vastaanottajalle lähetetty uusi osake- tai joukkovelkakirja-anti, jossa on avoin merkintä- tai kirjanpitoaika (esimerkiksi book open, final terms, term sheet), on vastattava, koska se vaatii sijoituspäätöksen. Rahastojen markkinointi ja kuukausiraportit ovat tiedoksi.
 

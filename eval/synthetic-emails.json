@@ -521,6 +521,22 @@
       "subject": "Kutsu: Startup Week -iltamme torstaina",
       "body": "Hei,\n\nkiva kun ehdittiin vaihtaa kuulumiset eilen. Järjestämme ensi viikolla torstaina 19.11. klo 15–19 vapaamuotoisen illan, jossa on mukana rahastomme yhtiöitä ja muita sijoittajia. Tule, kun sinulle sopii.\n\nKalle",
       "expect": { "toimenpide": ["tehtava"], "aihe": ["tapahtumat"] }
+    },
+    {
+      "id": "mennyt-tilaisuus",
+      "mailbox": "oma@example.com", "from": "Nora Networks", "fromAddress": "nora@lpgp-forum.example", "to": "Minä", "cc": "",
+      "received": "2026-08-26T15:32:00+03:00",
+      "subject": "Split, 30 September - 2 October: a small room of LPs and GPs",
+      "body": "Dear investor,\n\nmost private markets conferences are crowded and shallow. Ours is different: up to one hundred invited LPs, family offices and fund managers for three days in Split, Croatia, 30 September - 2 October. Let me know if you would like to receive the programme.\n\nNora",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["tapahtumat", "uutiskirje", "sijoitusmahdollisuudet"] }
+    },
+    {
+      "id": "kurssimainos",
+      "mailbox": "tyo@example.fi", "from": "Esimerkkiopisto", "fromAddress": "koulutus@esimerkkiopisto.example", "to": "Minä", "cc": "",
+      "received": "2026-11-16T12:21:00+02:00",
+      "subject": "Hae kevään johtamisen erikoistumiskoulutukseen!",
+      "body": "Haluatko kehittyä johtajana? Kevään erikoistumiskoulutus alkaa tammikuussa, ja haku on auki 7.1.2027 asti. Koulutus sopii työn ohessa suoritettavaksi.\n\nLue lisää ja hae | Peru tilaus",
+      "expect": { "toimenpide": ["tiedoksi"], "kiireellisyys": ["ei_maaraaikaa"], "aihe": ["uutiskirje", "tapahtumat"] }
     }
   ]
 }
